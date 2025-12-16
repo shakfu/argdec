@@ -4,14 +4,13 @@ version = "0.2.1"
 description = "A decorator-based, declarative interface to Python's argparse for building hierarchical CLI applications."
 readme = "README.md"
 requires-python = ">=3.7"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
     {name = "argdec contributors"}
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
@@ -19,6 +18,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 keywords = ["argparse", "cli", "command-line", "declarative", "decorator"]
@@ -28,11 +28,15 @@ dev = [
     "mypy>=1.4.1",
     "pytest-cov>=4.1.0",
     "ruff>=0.14.4",
+    "twine>=4.0.2",
 ]
 
 [build-system]
-requires = ["setuptools>=45", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["argdec"]
 
 [tool.pytest.ini_options]
 testpaths = ["test_argdec.py"]
