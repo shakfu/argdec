@@ -18,22 +18,31 @@ This combination eliminates boilerplate while preserving full access to argparse
 ## Features
 
 - **Decorator-driven options** - Configure argparse arguments with `@option` and `@option_group` decorators directly on methods
+
 - **Declarative command structure** - Methods prefixed with `do_` automatically become subcommands
+
 - **Hierarchical commands** - Build nested command structures (e.g., `git remote add`) using underscore-separated method names
+
 - **Reusable option groups** - Define common options once, apply to multiple commands with `@option_group`
+
 - **Full argparse compatibility** - All argparse features available through decorator parameters
+
 - **Customizable** - Configure command prefix, hierarchy levels, and more
+
 - **Production ready** - Comprehensive test suite, type hints, error handling
 
 ## Installation
 
 ```bash
-# Coming soon to PyPI
 pip install argdec
+```
 
-# For now, use directly from source
-git clone https://github.com/yourusername/argdec.git
+Or install from source:
+
+```bash
+git clone https://github.com/shakfu/argdec.git
 cd argdec
+pip install .
 ```
 
 ## Quick Start
@@ -187,7 +196,6 @@ if __name__ == '__main__':
 
 `with levels=0` gives:
 
-
 ```text
 $ python3 demo.py
 usage: demo.py [-h] [-v]  ...
@@ -259,7 +267,7 @@ class MyApp(Commander):
         pass
 ```
 
-See `example_custom_prefix.py` for more examples.
+See `examples/custom_prefix.py` for more examples.
 
 ### Error Handling
 
@@ -304,10 +312,6 @@ make all            # Run all checks
 
 ## Version History
 
-- **v0.2.1** (2025-12-16) - Renamed to `argdec`
-- **v0.2.0** (2025-11-07) - Release with tests, type hints, error handling, and configurable prefix
-- **v0.1.0** - Initial release with basic functionality
-
 See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
 
 ## License
@@ -316,14 +320,13 @@ MIT License - See [LICENSE](LICENSE) file for details.
 
 ## Credits
 
-Based on the original [argdec recipe](http://code.activestate.com/recipes/576935-argdec-declarative-interface-to-argparse) from ActiveState.
+Based on the original [argdeclare recipe](http://code.activestate.com/recipes/576935-argdeclare-declarative-interface-to-argparse) from ActiveState.
 
 ## Contributing
 
 Contributions welcome! Please:
+
 1. Run tests: `make test`
 2. Check types: `make typecheck`
 3. Lint code: `make lint`
 4. Add tests for new features
-
-```

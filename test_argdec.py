@@ -1,9 +1,16 @@
 """Test suite for argdec module."""
+import argparse
 import sys
 
 import pytest
 
-from argdec import Commander, option, option_group
+from argdec import (
+    Commander,
+    CommandExecutionError,
+    InvalidCommandNameError,
+    option,
+    option_group,
+)
 
 
 class TestOptionDecorator:
@@ -669,3 +676,68 @@ class TestIntegration:
         app.cmdline()
 
         assert "deploy_prod_docker" in results
+
+
+class TestErrorConditions:
+    """Tests for error conditions and exception handling."""
+
+    def test_empty_command_name_raises_error(self):
+        """Method with prefix but no command name should raise InvalidCommandNameError."""
+        with pytest.raises(InvalidCommandNameError, match="has no command name"):
+            class BadApp(Commander):
+                def do_(self, args):
+                    """Empty command name"""
+                    pass
+
+    def test_invalid_identifier_raises_error(self):
+        """Command name that's not a valid identifier should raise error."""
+        with pytest.raises(InvalidCommandNameError, match="Invalid command name"):
+            class BadApp(Commander):
+                def do_123invalid(self, args):
+                    """Starts with number"""
+                    pass
+
+    def test_command_execution_failure(self):
+        """Command that raises exception should be wrapped in CommandExecutionError."""
+        class FailingApp(Commander):
+            def do_fail(self, args):
+                """Command that fails"""
+                raise ValueError("Something went wrong")
+
+        app = FailingApp()
+        sys.argv = ["test", "fail"]
+
+        with pytest.raises(CommandExecutionError, match="failed"):
+            app.cmdline()
+
+    def test_invalid_parent_command_name(self):
+        """Invalid parent command name should raise InvalidCommandNameError."""
+        app = Commander()
+        app._argparse_structure = {}
+
+        # Create a mock subparsers object
+        parser = argparse.ArgumentParser()
+        subparsers = parser.add_subparsers()
+
+        # Empty string should fail
+        with pytest.raises(InvalidCommandNameError, match="Invalid parent command name"):
+            app._ensure_parent_parser(subparsers, "")
+
+        # Non-identifier should fail
+        with pytest.raises(InvalidCommandNameError, match="Invalid parent command name"):
+            app._ensure_parent_parser(subparsers, "123invalid")
+
+    def test_no_command_specified(self):
+        """Calling app without specifying a subcommand should raise error."""
+        class TestApp(Commander):
+            default_args = []  # Override default --help behavior
+
+            def do_build(self, args):
+                """Build command"""
+                pass
+
+        app = TestApp()
+        sys.argv = ["test"]  # No subcommand specified
+
+        with pytest.raises(CommandExecutionError, match="No command specified"):
+            app.cmdline()

@@ -12,6 +12,8 @@ import logging
 import sys
 from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
+__version__ = "0.2.2"
+
 # ------------------------------------------------------------------------------
 # Custom Exceptions
 

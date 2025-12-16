@@ -1,5 +1,7 @@
 .PHONY: test coverage lint typecheck all clean build check publish publish-test help
 
+all: test lint typecheck build check
+
 help:
 	@echo "Available targets:"
 	@echo "  test         - Run test suite with pytest"
@@ -24,8 +26,6 @@ lint:
 
 typecheck:
 	uv run mypy argdec.py
-
-all: test lint typecheck
 
 build: clean
 	uv build

@@ -1,13 +1,14 @@
 [project]
 name = "argdec"
-version = "0.2.1"
+version = "0.2.2"
 description = "A decorator-based, declarative interface to Python's argparse for building hierarchical CLI applications."
 readme = "README.md"
 requires-python = ">=3.7"
 license = "MIT"
 authors = [
-    {name = "argdec contributors"}
+    {name = "Shakeeb Alireza", email = "me@example.com"}
 ]
+
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",

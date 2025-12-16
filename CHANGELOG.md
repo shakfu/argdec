@@ -5,16 +5,44 @@ All notable changes to argdec will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [unreleased]
+
+## [0.2.2]
+
+### Added
+
+- **new error condition tests** improving coverage from 88% to 94%
+  - `test_empty_command_name_raises_error`
+  - `test_invalid_identifier_raises_error`
+  - `test_command_execution_failure`
+  - `test_invalid_parent_command_name`
+  - `test_no_command_specified`
+
+### Fixed
+
+- **Documentation placeholders** in README.md
+  - Updated installation instructions (removed "Coming soon to PyPI")
+  - Fixed example file reference path
+- **Type checking** compatibility with mypy 1.4+
+  - Updated `python_version` to 3.9 (mypy dropped 3.7 support)
+  - Added proper type parameters to generic types
+
 ## [0.2.1]
 
 ### Changed
 
-- **Project renamed to `argdec`** to differentiate from an earlire version of my project which was pushed to pypi by another person, and to emphasize the use of decorators in `argdec` to configure `argparse`.
+- **Project renamed to `argdec`** to differentiate from an earlier version of the project which was pushed to pypi by another person, and to emphasize the use of decorators in `argdec` to configure `argparse`.
+- **Updated packaging** for PyPI publication
+  - SPDX license format (`license = "MIT"`)
+  - Added `[tool.setuptools]` configuration
+  - Added Python 3.13 to classifiers
+  - Added Makefile targets: `build`, `check`, `publish`, `publish-test`
 
 ## [0.2.0]
 
 ### Added
-- **Comprehensive test suite** with 38 tests covering all functionality
+
+- **Comprehensive test suite** with 43 tests covering all functionality
   - Test coverage for decorators, metaclass, Commander variants, parsing, edge cases, and integration
   - 100% test pass rate
 - **Custom exception hierarchy** for better error handling
@@ -52,6 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `CHANGELOG.md` - This file
 
 ### Changed
+
 - **Refactored `parse_subparsers` to be fully recursive**
   - Cleaner implementation following functional recursion pattern
   - Extracted `_ensure_parent_parser` helper method
@@ -70,6 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - All exceptions maintain proper exception chaining
 
 ### Fixed
+
 - **Lambda closure bug** in `_ensure_parent_parser`
   - Replaced problematic lambda with proper function object
   - Function is now picklable and has correct behavior
@@ -80,6 +110,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Now configurable via `_command_prefix` class attribute
 
 ### Security
+
 - Added input validation to prevent invalid command names
 - Command name validation prevents injection-style attacks
 - Duplicate detection prevents accidental command overwrites
@@ -87,6 +118,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - Initial Release
 
 ### Added
+
 - Basic Commander class with metaclass-based command discovery
 - `@option` decorator for adding argparse options
 - `@option_group` for reusable option collections
@@ -99,6 +131,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Demo application showing usage
 
 ### Features
+
 - Declarative command-line interface definition
 - Automatic subcommand registration
 - Hierarchical command structures (e.g., `python build static`)
@@ -124,6 +157,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 All existing code will continue to work without modifications. The changes are purely additive (new features) and internal improvements (bug fixes, better error handling).
 
 #### What You Get Automatically
+
 - Better error messages if something goes wrong
 - Protection against state bugs (if you were creating multiple Commander instances)
 - Input validation on command names
@@ -131,6 +165,7 @@ All existing code will continue to work without modifications. The changes are p
 #### Optional New Features You Can Use
 
 **Custom Command Prefix:**
+
 ```python
 # Old way (still works)
 class MyApp(Commander):
@@ -146,6 +181,7 @@ class MyApp(Commander):
 ```
 
 **Better Error Handling:**
+
 ```python
 from argdec import ArgDecError, CommandExecutionError
 
@@ -161,6 +197,7 @@ except ArgDecError as e:
 All public APIs now have complete type hints, so mypy will provide better checking.
 
 #### No Breaking Changes
+
 - All existing decorators work the same (`@option`, `@option_group`, `@arg`)
 - All Commander attributes work the same (`name`, `version`, `epilog`, etc.)
 - Hierarchical commands (`_argparse_levels`) work identically
@@ -170,9 +207,10 @@ All public APIs now have complete type hints, so mypy will provide better checki
 
 ## Links
 
-- [Repository](https://github.com/yourusername/argdec) <!-- Update with actual repo -->
-- [Bug Reports](https://github.com/yourusername/argdec/issues) <!-- Update with actual repo -->
-- [Original Recipe](http://code.activestate.com/recipes/576935-argdec-declarative-interface-to-argparse)
+- [Repository](https://github.com/shakfu/argdec)
+- [Bug Reports](https://github.com/shakfu/argdec/issues)
+- [PyPI](https://pypi.org/project/argdec/)
+- [Original Recipe](http://code.activestate.com/recipes/576935-argdeclare-declarative-interface-to-argparse)
 
 ---
 
