@@ -15,22 +15,22 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 # ------------------------------------------------------------------------------
 # Custom Exceptions
 
-class ArgDeclareError(Exception):
+class ArgDecError(Exception):
     """Base exception for argdec errors."""
     pass
 
 
-class InvalidCommandNameError(ArgDeclareError):
+class InvalidCommandNameError(ArgDecError):
     """Raised when a command name is invalid."""
     pass
 
 
-class DuplicateCommandError(ArgDeclareError):
+class DuplicateCommandError(ArgDecError):
     """Raised when attempting to register a duplicate command."""
     pass
 
 
-class CommandExecutionError(ArgDeclareError):
+class CommandExecutionError(ArgDecError):
     """Raised when command execution fails."""
     pass
 
@@ -240,7 +240,7 @@ class Commander(metaclass=MetaCommander):
             The created subparser object
 
         Raises:
-            ArgDeclareError: If parser creation fails
+            ArgDecError: If parser creation fails
         """
         if not name:
             name = subcmd["name"]
@@ -254,7 +254,7 @@ class Commander(metaclass=MetaCommander):
             logger.debug(f"Added parser for command: {name}")
             return subparser
         except Exception as e:
-            raise ArgDeclareError(f"Failed to create parser for command '{name}': {e}") from e
+            raise ArgDecError(f"Failed to create parser for command '{name}': {e}") from e
 
     def _ensure_parent_parser(
         self,
@@ -362,7 +362,7 @@ class Commander(metaclass=MetaCommander):
 
         Raises:
             CommandExecutionError: If command execution fails
-            ArgDeclareError: If parser setup fails
+            ArgDecError: If parser setup fails
         """
         try:
             parser = argparse.ArgumentParser(
@@ -414,10 +414,10 @@ class Commander(metaclass=MetaCommander):
 
         except CommandExecutionError:
             raise
-        except ArgDeclareError:
+        except ArgDecError:
             raise
         except SystemExit:
             # Let argparse's sys.exit calls pass through (--help, --version, errors)
             raise
         except Exception as e:
-            raise ArgDeclareError(f"Unexpected error in cmdline: {e}") from e
+            raise ArgDecError(f"Unexpected error in cmdline: {e}") from e
