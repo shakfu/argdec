@@ -13,13 +13,13 @@ test:
 	uv run pytest
 
 coverage:
-	uv run pytest --cov=argdeclare --cov-report=term-missing --cov-report=html
+	uv run pytest --cov=argdec --cov-report=term-missing --cov-report=html
 
 lint:
-	uv run ruff check .
+	uv run ruff check --fix .
 
 typecheck:
-	uv run mypy argdeclare.py
+	uv run mypy argdec.py
 
 all: test lint typecheck
 

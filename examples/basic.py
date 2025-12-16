@@ -1,4 +1,5 @@
-from argdeclare import Commander, option
+from argdec import Commander, option
+
 
 class MyApp(Commander):
     """My awesome CLI application."""

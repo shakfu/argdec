@@ -1,22 +1,22 @@
-"""cli: general commandline interface module
+"""argdec: general commandline interface module
 
 Provides a declarative argparse-based class to be inherited
 by applications wishing to provide a basic commandline interface.
 
 This is based on my old `argdeclare` code
-    see: http://code.activestate.com/recipes/576935-argdeclare-declarative-interface-to-argparse
+    see: http://code.activestate.com/recipes/576935-argdec-declarative-interface-to-argparse
 
 """
 import argparse
-import sys
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple
+import sys
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 # ------------------------------------------------------------------------------
 # Custom Exceptions
 
 class ArgDeclareError(Exception):
-    """Base exception for argdeclare errors."""
+    """Base exception for argdec errors."""
     pass
 
 
@@ -45,7 +45,11 @@ logger = logging.getLogger(__name__)
 # Generic utility functions and classes for commandline ops
 
 
-def option(*args: Any, **kwds: Any) -> Callable[[Callable], Callable]:
+OptionSpec = Tuple[Tuple[Any, ...], Dict[str, Any]]
+DecoratorFunc = Callable[[Callable[..., Any]], Callable[..., Any]]
+
+
+def option(*args: Any, **kwds: Any) -> DecoratorFunc:
     """Decorator to add argparse options to command methods.
 
     Use this decorator to declaratively add command-line options to your
@@ -67,22 +71,22 @@ def option(*args: Any, **kwds: Any) -> Callable[[Callable], Callable]:
                 print(f"Building from {args.file}")
     """
 
-    def _decorator(func: Callable) -> Callable:
-        _option: Tuple[Tuple[Any, ...], Dict[str, Any]] = (args, kwds)
+    def _decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        _option: OptionSpec = (args, kwds)
         if hasattr(func, "options"):
-            func.options.append(_option)
+            cast(Any, func).options.append(_option)
         else:
-            func.options = [_option]
+            cast(Any, func).options = [_option]
         return func
 
     return _decorator
 
 
 # Alias for option decorator
-arg: Callable[..., Callable[[Callable], Callable]] = option
+arg = option
 
 
-def option_group(*options: Callable[[Callable], Callable]) -> Callable[[Callable], Callable]:
+def option_group(*options: DecoratorFunc) -> DecoratorFunc:
     """Combine multiple option decorators into a reusable group.
 
     This is useful when you have common options that should be applied to
@@ -112,7 +116,7 @@ def option_group(*options: Callable[[Callable], Callable]) -> Callable[[Callable
             pass
     """
 
-    def _decorator(func: Callable) -> Callable:
+    def _decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         for opt in options:
             func = opt(func)
         return func
@@ -221,7 +225,7 @@ class Commander(metaclass=MetaCommander):
 
     def add_parser(
         self,
-        subparsers: argparse._SubParsersAction,
+        subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]",
         subcmd: Dict[str, Any],
         name: Optional[str] = None
     ) -> argparse.ArgumentParser:
@@ -254,9 +258,9 @@ class Commander(metaclass=MetaCommander):
 
     def _ensure_parent_parser(
         self,
-        subparsers: argparse._SubParsersAction,
+        subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]",
         head: str
-    ) -> argparse._SubParsersAction:
+    ) -> "argparse._SubParsersAction[argparse.ArgumentParser]":
         """Ensure parent parser exists in structure, creating dummy if needed.
 
         When building hierarchical commands, intermediate levels may not have
@@ -277,12 +281,12 @@ class Commander(metaclass=MetaCommander):
             raise InvalidCommandNameError(f"Invalid parent command name: '{head}'")
 
         if head not in self._argparse_structure:
-            def dummy_func(self, args):
+            def dummy_func(self: Any, args: argparse.Namespace) -> None:
                 """Placeholder function for intermediate hierarchy level."""
                 pass
             dummy_func.__doc__ = f"{head} commands"
 
-            dummy_subcmd = {
+            dummy_subcmd: Dict[str, Any] = {
                 'name': head,
                 'func': dummy_func,
                 'options': [],
@@ -296,11 +300,14 @@ class Commander(metaclass=MetaCommander):
             )
             logger.debug(f"Created parent parser: {head}")
 
-        return self._argparse_structure[head]
+        return cast(
+            "argparse._SubParsersAction[argparse.ArgumentParser]",
+            self._argparse_structure[head]
+        )
 
     def parse_subparsers(
         self,
-        subparsers: argparse._SubParsersAction,
+        subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]",
         subcmd: Dict[str, Any],
         name: str
     ) -> argparse.ArgumentParser:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from argdeclare import Commander, option, option_group
+from argdec import Commander, option, option_group
 
 # ----------------------------------------------------------------------------
 # Commandline interface
@@ -77,12 +77,12 @@ class Application(Commander):
     #     """check reference utilities"""
     #     print(args)
 
-    @common_options    
+    @common_options
     def do_check_log_day(self, args):
         """analyze log day"""
         print(args)
 
-    @common_options    
+    @common_options
     def do_check_log_week(self, args):
         """analyze log week"""
         print(args)

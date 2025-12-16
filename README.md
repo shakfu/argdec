@@ -1,35 +1,45 @@
-# argdeclare
+# argdec
 
-A declarative interface to Python's argparse for building hierarchical CLI applications.
+A decorator-based, declarative interface to Python's argparse for building hierarchical CLI applications.
 
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+## Overview
+
+**argdec** (formerly [argdeclare](http://code.activestate.com/recipes/576935-argdeclare-declarative-interface-to-argparse)) provides two complementary approaches to configuring argparse:
+
+1. **Decorator-based configuration** - Use `@option` and `@option_group` decorators to attach argparse arguments directly to command methods, keeping argument definitions co-located with the code that uses them.
+
+2. **Declarative class structure** - Define CLI applications as classes where methods become commands, docstrings become help text, and class attributes configure parser behavior.
+
+This combination eliminates boilerplate while preserving full access to argparse's capabilities.
+
 ## Features
 
-- **Declarative syntax** - Define commands with decorators and methods
-- **Hierarchical commands** - Build nested command structures (e.g., `git remote add`)
-- **Option decorators** - Add argparse options with `@option` decorator
-- **Option groups** - Reuse common options across commands with `@option_group`
+- **Decorator-driven options** - Configure argparse arguments with `@option` and `@option_group` decorators directly on methods
+- **Declarative command structure** - Methods prefixed with `do_` automatically become subcommands
+- **Hierarchical commands** - Build nested command structures (e.g., `git remote add`) using underscore-separated method names
+- **Reusable option groups** - Define common options once, apply to multiple commands with `@option_group`
+- **Full argparse compatibility** - All argparse features available through decorator parameters
 - **Customizable** - Configure command prefix, hierarchy levels, and more
 - **Production ready** - Comprehensive test suite, type hints, error handling
-- **Well documented** - Docstrings, examples, and guides
 
 ## Installation
 
 ```bash
 # Coming soon to PyPI
-pip install argdeclare
+pip install argdec
 
 # For now, use directly from source
-git clone https://github.com/yourusername/argdeclare.git
-cd argdeclare
+git clone https://github.com/yourusername/argdec.git
+cd argdec
 ```
 
 ## Quick Start
 
 ```python
-from argdeclare import Commander, option
+from argdec import Commander, option
 
 class MyApp(Commander):
     """My awesome CLI application."""
@@ -56,7 +66,7 @@ Building... (verbose=True)
 ```python
 #!/usr/bin/env python3
 
-from argdeclare import Commander, option, option_group
+from argdec import Commander, option, option_group
 
 # ----------------------------------------------------------------------------
 # Commandline interface
@@ -256,13 +266,13 @@ See `example_custom_prefix.py` for more examples.
 Version 0.2.0+ includes comprehensive error handling:
 
 ```python
-from argdeclare import ArgDeclareError, CommandExecutionError
+from argdec import ArgDecError, CommandExecutionError
 
 try:
     app.cmdline()
 except CommandExecutionError as e:
     print(f"Command failed: {e}")
-except ArgDeclareError as e:
+except ArgDecError as e:
     print(f"Configuration error: {e}")
 ```
 
@@ -294,7 +304,8 @@ make all            # Run all checks
 
 ## Version History
 
-- **v0.2.0** (2025-11-07) - Production-ready release with tests, type hints, error handling, and configurable prefix
+- **v0.2.1** (2025-12-16) - Renamed to `argdec`
+- **v0.2.0** (2025-11-07) - Release with tests, type hints, error handling, and configurable prefix
 - **v0.1.0** - Initial release with basic functionality
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
@@ -305,7 +316,7 @@ MIT License - See [LICENSE](LICENSE) file for details.
 
 ## Credits
 
-Based on the original [argdeclare recipe](http://code.activestate.com/recipes/576935-argdeclare-declarative-interface-to-argparse) from ActiveState.
+Based on the original [argdec recipe](http://code.activestate.com/recipes/576935-argdec-declarative-interface-to-argparse) from ActiveState.
 
 ## Contributing
 

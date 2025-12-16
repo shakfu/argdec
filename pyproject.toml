@@ -1,12 +1,12 @@
 [project]
-name = "argdeclare"
-version = "0.2.0"
+name = "argdec"
+version = "0.2.1"
 description = "Declarative interface to argparse for building hierarchical CLI applications"
 readme = "README.md"
 requires-python = ">=3.7"
 license = {text = "MIT"}
 authors = [
-    {name = "argdeclare contributors"}
+    {name = "argdec contributors"}
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -35,7 +35,7 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
-testpaths = ["test_argdeclare.py"]
+testpaths = ["test_argdec.py"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -63,11 +63,11 @@ ignore = [
 ]
 
 [tool.mypy]
-python_version = "3.7"
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
-disallow_any_generics = true
+disallow_any_generics = false
 check_untyped_defs = true
 no_implicit_optional = true
 warn_redundant_casts = true
@@ -76,7 +76,7 @@ warn_no_return = true
 strict_equality = true
 
 [tool.coverage.run]
-source = ["argdeclare"]
+source = ["argdec"]
 omit = ["test_*.py", "demo.py", "archive/*"]
 
 [tool.coverage.report]

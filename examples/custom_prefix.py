@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Example demonstrating custom command prefix in argdeclare.
+"""Example demonstrating custom command prefix in argdec.
 
-By default, argdeclare discovers methods starting with 'do_' as commands.
+By default, argdec discovers methods starting with 'do_' as commands.
 You can customize this by setting the _command_prefix class attribute.
 """
 
-from argdeclare import Commander, option, option_group
+from argdec import Commander, option
+
 
 # Example 1: Using custom 'cmd_' prefix
 class MyApp(Commander):

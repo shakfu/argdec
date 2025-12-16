@@ -1,9 +1,15 @@
 # Changelog
 
-All notable changes to argdeclare will be documented in this file.
+All notable changes to argdec will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.2.1]
+
+### Changed
+
+- **Project renamed to `argdec`** to differentiate from an earlire version of my project which was pushed to pypi by another person, and to emphasize the use of decorators in `argdec` to configure `argparse`.
 
 ## [0.2.0]
 
@@ -12,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Test coverage for decorators, metaclass, Commander variants, parsing, edge cases, and integration
   - 100% test pass rate
 - **Custom exception hierarchy** for better error handling
-  - `ArgDeclareError` - Base exception class
+  - `ArgDecError` - Base exception class
   - `InvalidCommandNameError` - For invalid command names
   - `DuplicateCommandError` - For duplicate command registration
   - `CommandExecutionError` - For command execution failures
@@ -141,13 +147,13 @@ class MyApp(Commander):
 
 **Better Error Handling:**
 ```python
-from argdeclare import ArgDeclareError, CommandExecutionError
+from argdec import ArgDecError, CommandExecutionError
 
 try:
     app.cmdline()
 except CommandExecutionError as e:
     print(f"Command failed: {e}")
-except ArgDeclareError as e:
+except ArgDecError as e:
     print(f"Configuration error: {e}")
 ```
 
@@ -164,14 +170,14 @@ All public APIs now have complete type hints, so mypy will provide better checki
 
 ## Links
 
-- [Repository](https://github.com/yourusername/argdeclare) <!-- Update with actual repo -->
-- [Bug Reports](https://github.com/yourusername/argdeclare/issues) <!-- Update with actual repo -->
-- [Original Recipe](http://code.activestate.com/recipes/576935-argdeclare-declarative-interface-to-argparse)
+- [Repository](https://github.com/yourusername/argdec) <!-- Update with actual repo -->
+- [Bug Reports](https://github.com/yourusername/argdec/issues) <!-- Update with actual repo -->
+- [Original Recipe](http://code.activestate.com/recipes/576935-argdec-declarative-interface-to-argparse)
 
 ---
 
 ## Contributors
 
-Thanks to all contributors who helped make argdeclare better!
+Thanks to all contributors who helped make argdec better!
 
 <!-- Add contributors as project grows -->

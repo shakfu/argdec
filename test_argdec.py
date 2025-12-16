@@ -1,8 +1,9 @@
-"""Test suite for argdeclare module."""
-import pytest
+"""Test suite for argdec module."""
 import sys
-from io import StringIO
-from argdeclare import Commander, option, option_group, MetaCommander
+
+import pytest
+
+from argdec import Commander, option, option_group
 
 
 class TestOptionDecorator:
@@ -38,13 +39,13 @@ class TestOptionDecorator:
         assert len(func.options) == 1
         args, kwds = func.options[0]
         assert args == ("--count",)
-        assert kwds["type"] == int
+        assert kwds["type"] is int
         assert kwds["default"] == 5
         assert kwds["help"] == "number of items"
 
     def test_arg_alias(self):
         """arg should be an alias for option."""
-        from argdeclare import arg
+        from argdec import arg
         assert arg is option
 
 

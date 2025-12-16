@@ -1,4 +1,6 @@
-import sys, argparse
+import argparse
+import sys
+
 
 # option decorator
 def option(*args, **kwds):
