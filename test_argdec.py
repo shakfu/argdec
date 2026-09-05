@@ -1,13 +1,14 @@
 """Test suite for argdec module."""
 import argparse
-import sys
 
 import pytest
 
 from argdec import (
+    ArgDecError,
     Commander,
     CommandExecutionError,
     InvalidCommandNameError,
+    MetaCommander,
     option,
     option_group,
 )
@@ -152,7 +153,7 @@ class TestCommanderBasic:
             pass
 
         app = TestApp()
-        assert app.name == "app name"
+        assert app.name == ""
         assert app.version == "0.1"
         assert app.default_args == ["--help"]
 
@@ -205,18 +206,12 @@ class TestCommanderSingleLevel:
                 pass
 
         app = TestApp()
-        # Save and restore sys.argv to avoid interference
-        old_argv = sys.argv
-        try:
-            sys.argv = ["test"]
-            with pytest.raises(SystemExit):
-                app.cmdline()
+        with pytest.raises(SystemExit):
+            app.cmdline(argv=[])
 
-            captured = capsys.readouterr()
-            assert "build" in captured.out
-            assert "test" in captured.out
-        finally:
-            sys.argv = old_argv
+        captured = capsys.readouterr()
+        assert "build" in captured.out
+        assert "test" in captured.out
 
     def test_single_level_command_execution(self):
         """Single-level command should execute correctly."""
@@ -231,8 +226,7 @@ class TestCommanderSingleLevel:
                 executed.append(("build", args.verbose))
 
         app = TestApp()
-        sys.argv = ["test", "build", "-v"]
-        app.cmdline()
+        app.cmdline(argv=["build", "-v"])
 
         assert len(executed) == 1
         assert executed[0] == ("build", True)
@@ -256,16 +250,11 @@ class TestCommanderHierarchical:
                 pass
 
         app = TestApp()
-        old_argv = sys.argv
-        try:
-            sys.argv = ["test"]
-            with pytest.raises(SystemExit):
-                app.cmdline()
+        with pytest.raises(SystemExit):
+            app.cmdline(argv=[])
 
-            captured = capsys.readouterr()
-            assert "python" in captured.out
-        finally:
-            sys.argv = old_argv
+        captured = capsys.readouterr()
+        assert "python" in captured.out
 
     def test_hierarchical_multiple_levels(self, capsys):
         """Commands with multiple underscores should create deep hierarchy."""
@@ -282,16 +271,11 @@ class TestCommanderHierarchical:
                 pass
 
         app = TestApp()
-        old_argv = sys.argv
-        try:
-            sys.argv = ["test"]
-            with pytest.raises(SystemExit):
-                app.cmdline()
+        with pytest.raises(SystemExit):
+            app.cmdline(argv=[])
 
-            captured = capsys.readouterr()
-            assert "build" in captured.out
-        finally:
-            sys.argv = old_argv
+        captured = capsys.readouterr()
+        assert "build" in captured.out
 
     def test_hierarchical_command_execution(self):
         """Hierarchical commands should execute correctly."""
@@ -306,8 +290,7 @@ class TestCommanderHierarchical:
                 executed.append(("python_build", args.verbose))
 
         app = TestApp()
-        sys.argv = ["test", "python", "build", "-v"]
-        app.cmdline()
+        app.cmdline(argv=["python", "build", "-v"])
 
         assert len(executed) == 1
         assert executed[0] == ("python_build", True)
@@ -325,8 +308,7 @@ class TestCommanderHierarchical:
                 executed.append(("build_python_static", args.type))
 
         app = TestApp()
-        sys.argv = ["test", "build", "python", "static", "--type", "release"]
-        app.cmdline()
+        app.cmdline(argv=["build", "python", "static", "--type", "release"])
 
         assert len(executed) == 1
         assert executed[0] == ("build_python_static", "release")
@@ -353,7 +335,9 @@ class TestRecursiveParsing:
         result = app.parse_subparsers(subparsers, subcmd, "build")
 
         assert result is not None
-        assert "build" in app._argparse_structure
+        # A leaf gets no subparsers of its own until something needs to nest under it
+        assert "build" in app._argparse_parsers
+        assert "build" not in app._argparse_structure
 
     def test_recursive_case_single_level(self):
         """Recursive case with one underscore should create parent."""
@@ -393,8 +377,9 @@ class TestRecursiveParsing:
         result = app.parse_subparsers(subparsers, subcmd, "build_python_static")
 
         assert result is not None
+        # Keys are full dotted paths, so sibling branches cannot collide
         assert "build" in app._argparse_structure
-        assert "python" in app._argparse_structure
+        assert "build.python" in app._argparse_structure
 
 
 class TestEnsureParentParser:
@@ -486,8 +471,7 @@ class TestCustomPrefix:
                 executed.append(("build", args.verbose))
 
         app = TestApp()
-        sys.argv = ["test", "build", "-v"]
-        app.cmdline()
+        app.cmdline(argv=["build", "-v"])
 
         assert len(executed) == 1
         assert executed[0] == ("build", True)
@@ -505,8 +489,7 @@ class TestCustomPrefix:
                 executed.append("python_build")
 
         app = TestApp()
-        sys.argv = ["test", "python", "build"]
-        app.cmdline()
+        app.cmdline(argv=["python", "build"])
 
         assert "python_build" in executed
 
@@ -548,16 +531,11 @@ class TestEdgeCases:
             default_args = ["--help"]
 
         app = TestApp()
-        old_argv = sys.argv
-        try:
-            sys.argv = ["test"]
-            with pytest.raises(SystemExit):
-                app.cmdline()
+        with pytest.raises(SystemExit):
+            app.cmdline(argv=[])
 
-            captured = capsys.readouterr()
-            assert "subcommands" in captured.out
-        finally:
-            sys.argv = old_argv
+        captured = capsys.readouterr()
+        assert "subcommands" in captured.out
 
     def test_empty_option_group(self):
         """Empty option_group should not break."""
@@ -596,10 +574,8 @@ class TestEdgeCases:
             version = "1.2.3"
 
         app = TestApp()
-        sys.argv = ["test", "--version"]
-
         with pytest.raises(SystemExit):
-            app.cmdline()
+            app.cmdline(argv=["--version"])
 
         captured = capsys.readouterr()
         assert "1.2.3" in captured.out
@@ -644,8 +620,7 @@ class TestIntegration:
                 results.append(("test_unit", args.verbose, args.debug))
 
         app = TestApp()
-        sys.argv = ["test", "build", "app", "-v", "-d"]
-        app.cmdline()
+        app.cmdline(argv=["build", "app", "-v", "-d"])
 
         assert len(results) == 1
         assert results[0] == ("build_app", True, True)
@@ -672,8 +647,7 @@ class TestIntegration:
         app = TestApp()
 
         # Test deep command
-        sys.argv = ["test", "deploy", "prod", "docker"]
-        app.cmdline()
+        app.cmdline(argv=["deploy", "prod", "docker"])
 
         assert "deploy_prod_docker" in results
 
@@ -705,10 +679,8 @@ class TestErrorConditions:
                 raise ValueError("Something went wrong")
 
         app = FailingApp()
-        sys.argv = ["test", "fail"]
-
         with pytest.raises(CommandExecutionError, match="failed"):
-            app.cmdline()
+            app.cmdline(argv=["fail"])
 
     def test_invalid_parent_command_name(self):
         """Invalid parent command name should raise InvalidCommandNameError."""
@@ -737,7 +709,604 @@ class TestErrorConditions:
                 pass
 
         app = TestApp()
-        sys.argv = ["test"]  # No subcommand specified
 
-        with pytest.raises(CommandExecutionError, match="No command specified"):
-            app.cmdline()
+        # Follows argparse convention: usage on stderr, exit code 2
+        with pytest.raises(SystemExit) as excinfo:
+            app.cmdline(argv=[])
+
+        assert excinfo.value.code == 2
+
+
+class TestInheritance:
+    """Commands and configuration should be inherited by subclasses."""
+
+    def test_subclass_keeps_base_commands(self):
+        """A subclass must not lose the commands defined by its base."""
+        class Base(Commander):
+            def do_build(self, args):
+                """build"""
+
+        class Child(Base):
+            def do_test(self, args):
+                """test"""
+
+        assert set(Child._argparse_subcmds) == {"build", "test"}
+        assert set(Base._argparse_subcmds) == {"build"}
+
+    def test_inherited_command_executes(self):
+        """An inherited command should be runnable from the subclass."""
+        executed = []
+
+        class Base(Commander):
+            def do_build(self, args):
+                """build"""
+                executed.append("build")
+
+        class Child(Base):
+            def do_test(self, args):
+                """test"""
+                executed.append("test")
+
+        Child().cmdline(argv=["build"])
+        assert executed == ["build"]
+
+    def test_subclass_can_override_base_command(self):
+        """Redefining a command in a subclass should replace the base version."""
+        executed = []
+
+        class Base(Commander):
+            def do_build(self, args):
+                """build"""
+                executed.append("base")
+
+        class Child(Base):
+            def do_build(self, args):
+                """build better"""
+                executed.append("child")
+
+        Child().cmdline(argv=["build"])
+        assert executed == ["child"]
+
+    def test_deep_inheritance_chain(self):
+        """Commands should accumulate across a multi-level hierarchy."""
+        class A(Commander):
+            def do_a(self, args):
+                """a"""
+
+        class B(A):
+            def do_b(self, args):
+                """b"""
+
+        class C(B):
+            def do_c(self, args):
+                """c"""
+
+        assert set(C._argparse_subcmds) == {"a", "b", "c"}
+
+    def test_command_prefix_is_inherited(self):
+        """A subclass should inherit _command_prefix from its base."""
+        class Base(Commander):
+            _command_prefix = "cmd_"
+
+            def cmd_build(self, args):
+                """build"""
+
+        class Child(Base):
+            def cmd_test(self, args):
+                """test"""
+
+        assert set(Child._argparse_subcmds) == {"build", "test"}
+
+    def test_multiple_inheritance_merges_commands(self):
+        """Commands from several bases should all be present."""
+        class BuildMixin(Commander):
+            def do_build(self, args):
+                """build"""
+
+        class TestMixin(Commander):
+            def do_test(self, args):
+                """test"""
+
+        class App(BuildMixin, TestMixin):
+            def do_deploy(self, args):
+                """deploy"""
+
+        assert set(App._argparse_subcmds) == {"build", "test", "deploy"}
+
+
+class TestHierarchyIsolation:
+    """Sibling branches sharing a segment name must stay independent."""
+
+    def test_shared_segment_does_not_collide(self):
+        """Two branches with a common middle segment should both be reachable."""
+        executed = []
+
+        class App(Commander):
+            _argparse_levels = 2
+
+            def do_build_test_x(self, args):
+                """bx"""
+                executed.append("build_test_x")
+
+            def do_deploy_test_y(self, args):
+                """dy"""
+                executed.append("deploy_test_y")
+
+        app = App()
+        app.cmdline(argv=["deploy", "test", "y"])
+        app.cmdline(argv=["build", "test", "x"])
+
+        assert executed == ["deploy_test_y", "build_test_x"]
+
+    def test_shared_segment_keys_are_distinct(self):
+        """The structure should key each branch by its full path."""
+        class App(Commander):
+            _argparse_levels = 2
+
+            def do_build_test_x(self, args):
+                """bx"""
+
+            def do_deploy_test_y(self, args):
+                """dy"""
+
+        app = App()
+        app.build_parser()
+
+        assert "build.test" in app._argparse_structure
+        assert "deploy.test" in app._argparse_structure
+
+    def test_command_that_is_also_a_parent(self):
+        """A leaf command may also host deeper commands."""
+        executed = []
+
+        class App(Commander):
+            _argparse_levels = 1
+
+            def do_test(self, args):
+                """run all tests"""
+                executed.append("test")
+
+            def do_test_unit(self, args):
+                """run unit tests"""
+                executed.append("test_unit")
+
+        app = App()
+        app.cmdline(argv=["test"])
+        app.cmdline(argv=["test", "unit"])
+
+        assert executed == ["test", "test_unit"]
+
+    def test_registration_order_does_not_matter(self):
+        """A parent defined after its child should still work."""
+        executed = []
+
+        class App(Commander):
+            _argparse_levels = 1
+
+            def do_test_unit(self, args):
+                """run unit tests"""
+                executed.append("test_unit")
+
+            def do_test(self, args):
+                """run all tests"""
+                executed.append("test")
+
+        app = App()
+        app.cmdline(argv=["test", "unit"])
+        app.cmdline(argv=["test"])
+
+        assert executed == ["test_unit", "test"]
+
+
+class TestArgparseLevels:
+    """_argparse_levels should cap the nesting depth."""
+
+    def test_levels_zero_is_flat(self):
+        """Level 0 keeps underscores in the command name."""
+        executed = []
+
+        class App(Commander):
+            _argparse_levels = 0
+
+            def do_python_shared_pkg(self, args):
+                """build"""
+                executed.append("run")
+
+        App().cmdline(argv=["python_shared_pkg"])
+        assert executed == ["run"]
+
+    def test_levels_one_nests_once(self):
+        """Level 1 gives one parent and a leaf that may contain underscores."""
+        executed = []
+
+        class App(Commander):
+            _argparse_levels = 1
+
+            def do_python_shared_pkg(self, args):
+                """build"""
+                executed.append("run")
+
+        App().cmdline(argv=["python", "shared_pkg"])
+        assert executed == ["run"]
+
+    def test_levels_two_nests_twice(self):
+        """Level 2 gives two parents and a leaf."""
+        executed = []
+
+        class App(Commander):
+            _argparse_levels = 2
+
+            def do_python_shared_pkg(self, args):
+                """build"""
+                executed.append("run")
+
+        App().cmdline(argv=["python", "shared", "pkg"])
+        assert executed == ["run"]
+
+    def test_levels_one_rejects_deeper_path(self):
+        """Level 1 should not accept a level-2 invocation."""
+        class App(Commander):
+            _argparse_levels = 1
+
+            def do_python_shared_pkg(self, args):
+                """build"""
+
+        with pytest.raises(SystemExit):
+            App().cmdline(argv=["python", "shared", "pkg"])
+
+    def test_levels_deeper_than_name(self):
+        """A name with fewer underscores than levels stays a shallow command."""
+        executed = []
+
+        class App(Commander):
+            _argparse_levels = 3
+
+            def do_build(self, args):
+                """build"""
+                executed.append("run")
+
+        App().cmdline(argv=["build"])
+        assert executed == ["run"]
+
+
+class TestReusability:
+    """A Commander instance should be reusable."""
+
+    def test_cmdline_can_be_called_repeatedly(self):
+        """Calling cmdline() more than once must not raise."""
+        executed = []
+
+        class App(Commander):
+            _argparse_levels = 1
+
+            def do_python_build(self, args):
+                """build python"""
+                executed.append("run")
+
+        app = App()
+        for _ in range(3):
+            app.cmdline(argv=["python", "build"])
+
+        assert executed == ["run", "run", "run"]
+
+    def test_build_parser_is_repeatable(self):
+        """build_parser() should reset hierarchy state on each call."""
+        class App(Commander):
+            _argparse_levels = 1
+
+            def do_python_build(self, args):
+                """build python"""
+
+        app = App()
+        first = app.build_parser()
+        second = app.build_parser()
+
+        assert first is not second
+        assert set(app._argparse_structure) == {"python"}
+
+    def test_instances_do_not_share_state(self):
+        """Two instances of the same class should build independently."""
+        class App(Commander):
+            _argparse_levels = 1
+
+            def do_python_build(self, args):
+                """build python"""
+
+        a, b = App(), App()
+        a.build_parser()
+        b.build_parser()
+
+        assert a._argparse_structure is not b._argparse_structure
+
+
+class TestParentCommands:
+    """Invoking an intermediate level should show its help."""
+
+    def test_bare_parent_prints_help_and_exits(self, capsys):
+        """A parent command with no subcommand should not silently succeed."""
+        class App(Commander):
+            _argparse_levels = 1
+
+            def do_python_build(self, args):
+                """build python"""
+
+        with pytest.raises(SystemExit) as excinfo:
+            App().cmdline(argv=["python"])
+
+        assert excinfo.value.code == 2
+        assert "build" in capsys.readouterr().err
+
+    def test_parent_help_lists_children(self, capsys):
+        """The parent's help should list its subcommands."""
+        class App(Commander):
+            _argparse_levels = 1
+
+            def do_python_build(self, args):
+                """build python"""
+
+            def do_python_test(self, args):
+                """test python"""
+
+        with pytest.raises(SystemExit):
+            App().cmdline(argv=["python", "--help"])
+
+        out = capsys.readouterr().out
+        assert "build" in out
+        assert "test" in out
+
+
+class TestHelpFormatting:
+    """Help output details."""
+
+    def test_subcommand_help_shows_defaults(self, capsys):
+        """ArgumentDefaultsHelpFormatter should apply to subparsers too."""
+        class App(Commander):
+            @option("--count", type=int, default=7, help="how many")
+            def do_build(self, args):
+                """build the project"""
+
+        with pytest.raises(SystemExit):
+            App().cmdline(argv=["build", "--help"])
+
+        assert "default: 7" in capsys.readouterr().out
+
+    def test_leaf_help_has_no_empty_subcommand_section(self, capsys):
+        """A leaf command should not advertise subcommands it doesn't have."""
+        class App(Commander):
+            _argparse_levels = 1
+
+            def do_python_build(self, args):
+                """build python"""
+
+        with pytest.raises(SystemExit):
+            App().cmdline(argv=["python", "build", "--help"])
+
+        assert "subcommands" not in capsys.readouterr().out
+
+    def test_multiline_docstring_summary_used_as_help(self, capsys):
+        """Only the first docstring line should appear in the command listing."""
+        class App(Commander):
+            default_args = ["--help"]
+
+            def do_build(self, args):
+                """build the project
+
+                A much longer explanation that should not appear
+                in the top-level command listing.
+                """
+
+        with pytest.raises(SystemExit):
+            App().cmdline(argv=[])
+
+        out = capsys.readouterr().out
+        assert "build the project" in out
+        assert "much longer explanation" not in out
+
+    def test_prog_name_uses_name_attribute(self, capsys):
+        """The `name` attribute should set the program name in usage output."""
+        class App(Commander):
+            name = "myapp"
+            version = "1.0"
+
+        with pytest.raises(SystemExit):
+            App().cmdline(argv=["--version"])
+
+        assert "myapp 1.0" in capsys.readouterr().out
+
+
+class TestNameValidation:
+    """Command name validation happens at class definition time."""
+
+    def test_double_underscore_rejected(self):
+        """A doubled underscore yields an empty path segment and is invalid."""
+        with pytest.raises(InvalidCommandNameError, match="Invalid command name"):
+            class BadApp(Commander):
+                def do__foo(self, args):
+                    """leading underscore"""
+
+    def test_trailing_underscore_rejected(self):
+        """A trailing underscore yields an empty trailing segment."""
+        with pytest.raises(InvalidCommandNameError, match="Invalid command name"):
+            class BadApp(Commander):
+                def do_foo_(self, args):
+                    """trailing underscore"""
+
+    def test_error_message_names_the_custom_prefix(self):
+        """The empty-name error should quote the configured prefix."""
+        with pytest.raises(InvalidCommandNameError, match="'cmd_' prefix"):
+            class BadApp(Commander):
+                _command_prefix = "cmd_"
+
+                def cmd_(self, args):
+                    """no name"""
+
+
+class TestExamples:
+    """Smoke tests for the shipped example applications."""
+
+    @pytest.mark.parametrize("module", ["basic", "hierarchical", "custom_prefix"])
+    def test_example_imports(self, module):
+        """Each example should import cleanly."""
+        import importlib.util
+        import pathlib
+
+        path = pathlib.Path(__file__).parent / "examples" / f"{module}.py"
+        spec = importlib.util.spec_from_file_location(f"example_{module}", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+    def test_hierarchical_example_runs(self):
+        """The hierarchical example should execute a deep command."""
+        import importlib.util
+        import pathlib
+
+        path = pathlib.Path(__file__).parent / "examples" / "hierarchical.py"
+        spec = importlib.util.spec_from_file_location("example_hierarchical", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        mod.Application().cmdline(argv=["python", "framework", "pkg"])
+
+
+class TestUndocumentedCommands:
+    """Commands without docstrings should still work."""
+
+    def test_command_without_docstring(self, capsys):
+        """A command with no docstring gets no help text, but still registers."""
+        class App(Commander):
+            default_args = ["--help"]
+
+            def do_build(self, args):
+                pass
+
+        with pytest.raises(SystemExit):
+            App().cmdline(argv=[])
+
+        assert "build" in capsys.readouterr().out
+
+    def test_undocumented_command_executes(self):
+        """A command with no docstring should run normally."""
+        executed = []
+
+        class App(Commander):
+            def do_build(self, args):
+                executed.append("build")
+
+        App().cmdline(argv=["build"])
+        assert executed == ["build"]
+
+    def test_undocumented_command_help(self, capsys):
+        """`<cmd> --help` should work without a docstring to describe it."""
+        class App(Commander):
+            def do_build(self, args):
+                pass
+
+        with pytest.raises(SystemExit):
+            App().cmdline(argv=["build", "--help"])
+
+        assert "usage:" in capsys.readouterr().out
+
+
+class TestMetaCommanderStandalone:
+    """MetaCommander should be usable without inheriting from Commander."""
+
+    def test_metaclass_defaults_to_do_prefix(self):
+        """A class using the metaclass directly gets the default 'do_' prefix."""
+        class Standalone(metaclass=MetaCommander):
+            def do_build(self, args):
+                """build"""
+
+            def helper(self):
+                """not a command"""
+
+        assert set(Standalone._argparse_subcmds) == {"build"}
+
+    def test_metaclass_honours_explicit_prefix(self):
+        """An explicit prefix still wins on a standalone class."""
+        class Standalone(metaclass=MetaCommander):
+            _command_prefix = "cmd_"
+
+            def cmd_build(self, args):
+                """build"""
+
+            def do_ignored(self, args):
+                """ignored"""
+
+        assert set(Standalone._argparse_subcmds) == {"build"}
+
+    def test_prefix_lookup_skips_bases_without_one(self):
+        """A plain mixin ahead of Commander should not hide the prefix."""
+        class PlainMixin:
+            """Not a Commander, carries no _command_prefix."""
+
+        class App(PlainMixin, Commander):
+            def do_build(self, args):
+                """build"""
+
+        assert set(App._argparse_subcmds) == {"build"}
+
+
+class TestParserConstructionErrors:
+    """Failures while building the parser should name the offending command."""
+
+    def test_invalid_option_kwarg(self):
+        """A bad argparse keyword should raise ArgDecError naming the command."""
+        class App(Commander):
+            @option("--count", bogus_keyword=True)
+            def do_build(self, args):
+                """build"""
+
+        with pytest.raises(ArgDecError, match="Failed to create parser for command 'build'"):
+            App().build_parser()
+
+    def test_conflicting_option_strings(self):
+        """Two options sharing a flag should be reported against the command."""
+        class App(Commander):
+            @option("-v", "--verbose", action="store_true")
+            @option("-v", "--vociferous", action="store_true")
+            def do_build(self, args):
+                """build"""
+
+        with pytest.raises(ArgDecError, match="Failed to create parser for command 'build'"):
+            App().build_parser()
+
+    def test_error_is_not_a_command_execution_error(self):
+        """A setup failure is a configuration error, not an execution failure."""
+        class App(Commander):
+            @option("--count", bogus_keyword=True)
+            def do_build(self, args):
+                """build"""
+
+        with pytest.raises(ArgDecError) as excinfo:
+            App().cmdline(argv=["build"])
+
+        assert not isinstance(excinfo.value, CommandExecutionError)
+
+
+class TestUnexpectedParsingErrors:
+    """Errors argparse does not handle should surface as ArgDecError."""
+
+    def test_unexpected_error_during_parse(self):
+        """A `type=` callable raising an unhandled exception is wrapped."""
+        def exploding_type(value):
+            raise KeyError("boom")
+
+        class App(Commander):
+            @option("--count", type=exploding_type)
+            def do_build(self, args):
+                """build"""
+
+        with pytest.raises(ArgDecError, match="Unexpected error in cmdline"):
+            App().cmdline(argv=["build", "--count", "1"])
+
+    def test_argparse_handled_error_still_exits(self):
+        """A `type=` raising ValueError stays argparse's business (exit 2)."""
+        class App(Commander):
+            @option("--count", type=int)
+            def do_build(self, args):
+                """build"""
+
+        with pytest.raises(SystemExit) as excinfo:
+            App().cmdline(argv=["build", "--count", "not-a-number"])
+
+        assert excinfo.value.code == 2

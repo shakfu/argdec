@@ -2,7 +2,7 @@
 
 A decorator-based, declarative interface to Python's argparse for building hierarchical CLI applications.
 
-[![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Overview
@@ -21,7 +21,7 @@ This combination eliminates boilerplate while preserving full access to argparse
 
 - **Declarative command structure** - Methods prefixed with `do_` automatically become subcommands
 
-- **Hierarchical commands** - Build nested command structures (e.g., `git remote add`) using underscore-separated method names
+- **Hierarchical commands** - Build nested command structures (e.g., `git remote add`) using underscore-separated method names, to a depth you control
 
 - **Reusable option groups** - Define common options once, apply to multiple commands with `@option_group`
 
@@ -29,7 +29,9 @@ This combination eliminates boilerplate while preserving full access to argparse
 
 - **Customizable** - Configure command prefix, hierarchy levels, and more
 
-- **Production ready** - Comprehensive test suite, type hints, error handling
+- **Inheritance-friendly** - Share commands across applications with a common base class
+
+- **Typed** - Comprehensive test suite, PEP 561 type hints, explicit error handling
 
 ## Installation
 
@@ -194,6 +196,16 @@ if __name__ == '__main__':
     app.cmdline()
 ```
 
+The `_argparse_levels` attribute controls how deep the command hierarchy goes.
+A method name is split on **at most** `_argparse_levels` underscores, so the
+leaf command keeps whatever underscores remain:
+
+| `_argparse_levels` | `do_python_shared_pkg` is invoked as |
+| --- | --- |
+| `0` (default) | `app python_shared_pkg` |
+| `1` | `app python shared_pkg` |
+| `2` | `app python shared pkg` |
+
 `with levels=0` gives:
 
 ```text
@@ -250,6 +262,42 @@ subcommands:
 
 ## Advanced Features
 
+### Sharing Commands Between Applications
+
+Commands are inherited, so a common base class can supply commands to several
+applications. A subclass may override an inherited command by redefining the
+method under the same name.
+
+```python
+class CommonCommands(Commander):
+    def do_version_info(self, args):
+        """show build information"""
+        print("...")
+
+class MyApp(CommonCommands):
+    """My application."""
+    def do_build(self, args):
+        """Build the project."""
+        print("building")
+
+# MyApp now has both `build` and `version_info`
+```
+
+### Driving the CLI Programmatically
+
+`cmdline()` reads `sys.argv[1:]` by default, but accepts an explicit argument
+list — useful in tests, in a REPL, or when embedding the CLI in a larger
+program. A `Commander` instance can be invoked repeatedly.
+
+```python
+app = MyApp()
+app.cmdline(argv=["build", "--verbose"])
+app.cmdline(argv=["test"])
+```
+
+`build_parser()` is also public, if you want the configured
+`argparse.ArgumentParser` without executing anything.
+
 ### Custom Command Prefix
 
 By default, methods starting with `do_` become commands. You can customize this:
@@ -266,6 +314,8 @@ class MyApp(Commander):
         """Deploy the project."""
         pass
 ```
+
+The prefix is inherited by subclasses.
 
 See `examples/custom_prefix.py` for more examples.
 
@@ -284,6 +334,11 @@ except ArgDecError as e:
     print(f"Configuration error: {e}")
 ```
 
+Argparse conventions are preserved: `--help`, `--version`, argparse errors and
+a missing subcommand all raise `SystemExit` rather than an `ArgDecError`.
+Invoking an application (or an intermediate command) with no subcommand prints
+help to stderr and exits with status 2.
+
 ## Examples
 
 Can be found in the `examples` directory:
@@ -297,16 +352,17 @@ Can be found in the `examples` directory:
 ### Running Tests
 
 ```bash
-make test           # Run test suite (38 tests)
+make test           # Run test suite
 make coverage       # Run with coverage report
-make lint           # Run ruff linter
+make lint           # Run ruff linter (read-only)
+make fix            # Run ruff linter and apply fixes
 make typecheck      # Run mypy type checker
 make all            # Run all checks
 ```
 
 ### Requirements
 
-- Python 3.7+
+- Python 3.10+
 - No external dependencies (uses stdlib only)
 - Development: pytest, ruff, mypy (optional)
 
@@ -330,3 +386,8 @@ Contributions welcome! Please:
 2. Check types: `make typecheck`
 3. Lint code: `make lint`
 4. Add tests for new features
+
+The suite is kept at 100% statement and branch coverage (`make coverage`).
+That is a floor, not a goal: coverage sat at 94% while several real defects hid
+in covered lines, so please add tests that exercise *behaviour*, not just
+lines.

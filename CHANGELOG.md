@@ -7,6 +7,106 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+### Changed
+
+- Build backend switched from setuptools to `uv_build`. The wheel and sdist
+  contents are unchanged apart from `LICENSE`, which is now declared via
+  `license-files` and shipped in `dist-info/licenses/`.
+- **Minimum Python is now 3.10.** 3.9 reached end of life in October 2025 and
+  the dev toolchain (mypy 2.x, twine 7.x) no longer supports it. Annotations
+  in `argdec` now use the `X | None` union syntax and import `Callable` from
+  `collections.abc`.
+- Dev dependencies updated to mypy 2.3.1, pytest-cov 7.1.0, ruff 0.16.6 and
+  twine 7.0.0. Ruff's `target-version` is now `py310`.
+- Python 3.14 is now declared as supported and covered by CI.
+
+## [0.3.0]
+
+A correctness release. Four defects found in review made hierarchical and
+inherited commands unreliable; fixing them required small behavioural changes,
+so this is a minor version bump rather than a patch.
+
+### Fixed
+
+- **Commands are now inherited.** `MetaCommander` scanned only the new class's
+  own namespace and then overwrote `_argparse_subcmds`, so subclassing a
+  `Commander` subclass silently discarded every command defined by the base.
+  Commands now accumulate down the MRO, and a subclass may override an
+  inherited command by redefining the method. `_command_prefix` is inherited
+  too, which previously reverted to `do_` in subclasses.
+- **Sibling command branches no longer collide.** The hierarchy was keyed by
+  bare path segment, so `do_build_test_x` and `do_deploy_test_y` fought over
+  `test`: one command was grafted onto the wrong parent and became unreachable
+  (`error: invalid choice: 'test'`). Keys are now full dotted paths.
+- **`cmdline()` may be called more than once.** Hierarchy state persisted across
+  calls while the parser was rebuilt each time, so a second call raised
+  `ArgDecError: conflicting subparser`. State is now reset per build.
+- **`_argparse_levels` honours its value.** It was documented as a depth count
+  but implemented as an on/off switch — any non-zero value nested on every
+  underscore. A name is now split on at most `_argparse_levels` underscores.
+- **Subcommand help shows defaults.** `ArgumentDefaultsHelpFormatter` was set
+  only on the root parser, where no options live, so defaults were never shown.
+- **Leaf commands no longer advertise an empty subcommands section.** Child
+  subparsers are created lazily, only when a deeper command needs them.
+- **Command name validation catches malformed names at class-definition time.**
+  `do__foo` and `do_foo_` passed validation and then failed later with a
+  misleading `Invalid parent command name: ''`. Each segment is now validated,
+  and the error names the configured prefix rather than hard-coding `do_`.
+- **`LICENSE` contained GPL-3.0 text** while the package metadata and README
+  declared MIT. Replaced with the MIT license text.
+- **Author email** was the placeholder `me@example.com`.
+
+### Added
+
+- **`cmdline(argv=None)`** accepts an explicit argument list instead of always
+  reading `sys.argv`, for tests and embedding.
+- **`build_parser()`** exposes the configured `ArgumentParser` without executing.
+- **PEP 561 support** — the module is now a package shipping a `py.typed`
+  marker, so downstream type checkers can see the annotations. The import path
+  is unchanged.
+- **`__all__`** declaring the public API.
+- **Continuous integration** — GitHub Actions running tests on Python 3.9-3.13
+  plus lint, typecheck, coverage, and a distribution check.
+- **`[project.urls]`** metadata for the PyPI page.
+- **42 new tests** (43 -> 85) covering inheritance, branch isolation, hierarchy
+  depth, instance reuse, parent-command help, help formatting, name validation,
+  undocumented commands, standalone `MetaCommander` use, parser-construction
+  failures, and smoke tests for the shipped examples.
+- **100% statement and branch coverage**, enforced by `fail_under = 100`. Line
+  coverage alone sat at 94% while every defect fixed in this release lived in a
+  covered line, so branch coverage is now measured too and anything excluded
+  must carry a `pragma: no cover` explaining why it is unreachable.
+- **`make fix`** applies ruff's fixes; `make lint` is now read-only, so
+  `make all` no longer rewrites source as a side effect.
+- **`make distclean`** removes the virtualenv. `make clean` no longer does,
+  which previously tore down the environment midway through `make all`.
+- **`archive/README.md`** noting that the archived original is unmaintained.
+
+### Changed
+
+- **Invoking an application with no subcommand** prints help to stderr and exits
+  with status 2 (the argparse convention) instead of raising
+  `CommandExecutionError`. **Breaking** for callers catching that exception.
+- **Invoking an intermediate command** with no subcommand prints its help and
+  exits 2, instead of silently succeeding.
+- **`Commander.name` now sets the program name** in usage output; it was
+  documented and set in every example but read nowhere. Its default changed from
+  `"app name"` to `""` (meaning argparse's default, the script filename).
+  **Breaking** for anyone reading the old default.
+- **Multi-line docstrings** render properly: the first line becomes the short
+  help in command listings, the full docstring the subcommand description.
+  Commands with no docstring are handled without error.
+- **Flat and hierarchical commands share one registration path**, removing a
+  branch in `build_parser` that made `_split_command`'s flat case dead code.
+- **Intermediate command levels use a single help-printing function** rather
+  than a placeholder whose body was never executed.
+- **`add_parser` catches only what argparse raises**
+  (`ArgumentError`, `TypeError`, `ValueError`) instead of every exception,
+  while still naming the offending command, which argparse's own message omits.
+- **Minimum Python is now 3.9**, matching the mypy configuration. 3.7 and 3.8
+  were claimed in the classifiers but never tested and are both end-of-life.
+- Tests no longer mutate global `sys.argv`.
+
 ## [0.2.2]
 
 ### Added
@@ -109,11 +209,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Hard-coded command prefix**
   - Now configurable via `_command_prefix` class attribute
 
-### Security
+### Validation
 
-- Added input validation to prevent invalid command names
-- Command name validation prevents injection-style attacks
-- Duplicate detection prevents accidental command overwrites
+> Corrected in 0.3.0: this section was originally headed "Security" and claimed
+> the validation "prevents injection-style attacks". It does not. Command names
+> come from Python method identifiers in the developer's own source, never from
+> user input, so there is no injection surface. The checks catch developer
+> mistakes at class-definition time.
+
+- Added input validation to reject invalid command names
+- Duplicate detection to prevent accidental command overwrites
 
 ## [0.1.0] - Initial Release
 

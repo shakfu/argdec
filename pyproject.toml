@@ -1,43 +1,49 @@
 [project]
 name = "argdec"
-version = "0.2.2"
+version = "0.3.0"
 description = "A decorator-based, declarative interface to Python's argparse for building hierarchical CLI applications."
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.10"
 license = "MIT"
+license-files = ["LICENSE"]
 authors = [
-    {name = "Shakeeb Alireza", email = "me@example.com"}
+    {name = "Shakeeb Alireza", email = "shakeeb.alireza@gmail.com"}
 ]
 
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 keywords = ["argparse", "cli", "command-line", "declarative", "decorator"]
 
+[project.urls]
+Homepage = "https://github.com/shakfu/argdec"
+Repository = "https://github.com/shakfu/argdec"
+Changelog = "https://github.com/shakfu/argdec/blob/main/CHANGELOG.md"
+Issues = "https://github.com/shakfu/argdec/issues"
+
 [dependency-groups]
 dev = [
-    "mypy>=1.4.1",
-    "pytest-cov>=4.1.0",
-    "ruff>=0.14.4",
-    "twine>=4.0.2",
+    "mypy>=2.3.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.6",
+    "twine>=7.0.0",
 ]
 
 [build-system]
-requires = ["setuptools>=77", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.12.10,<0.13"]
+build-backend = "uv_build"
 
-[tool.setuptools]
-py-modules = ["argdec"]
+[tool.uv.build-backend]
+module-root = ""
+module-name = "argdec"
 
 [tool.pytest.ini_options]
 testpaths = ["test_argdec.py"]
@@ -51,7 +57,7 @@ addopts = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py37"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = [
@@ -68,7 +74,7 @@ ignore = [
 ]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -82,9 +88,14 @@ strict_equality = true
 
 [tool.coverage.run]
 source = ["argdec"]
-omit = ["test_*.py", "demo.py", "archive/*"]
+branch = true
+omit = ["test_*.py", "demo.py", "archive/*", "examples/*"]
 
 [tool.coverage.report]
+# The suite covers every line and branch; anything deliberately excluded must
+# carry an explicit `pragma: no cover` explaining why it is unreachable.
+fail_under = 100
+show_missing = true
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
