@@ -518,8 +518,8 @@ class Commander(metaclass=MetaCommander):
             metavar="",
         )
 
-        # Sorted order is load-bearing, not cosmetic: a command that is the
-        # prefix of another ('test' vs 'test_unit') must be registered first so
+        # Sorted order is important: a command that is the prefix of
+        # another ('test' vs 'test_unit') must be registered first so
         # that the deeper command attaches to the real parser rather than
         # colliding with a generated parent.
         # With _argparse_levels == 0 every name is a single segment, so this
