@@ -2,8 +2,7 @@
 
 A decorator-based, declarative interface to Python's argparse for building hierarchical CLI applications.
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Overview
 
@@ -31,7 +30,9 @@ This combination eliminates boilerplate while preserving full access to argparse
 
 - **Inheritance-friendly** - Share commands across applications with a common base class
 
-- **Typed** - Comprehensive test suite, PEP 561 type hints, explicit error handling
+- **Typed** - Comprehensive test suite, inline type hints, explicit error handling
+
+- **Single module** - One dependency-free file, so it can be vendored by copying `argdec.py`
 
 ## Installation
 
@@ -45,6 +46,24 @@ Or install from source:
 git clone https://github.com/shakfu/argdec.git
 cd argdec
 pip install .
+```
+
+argdec is a single module with no dependencies. To vendor it, copy `argdec.py` into your project instead of installing.
+
+### Type checking
+
+`argdec.py` is annotated. pyright and Pylance read those annotations from the installed source, so decorated commands keep their signatures:
+
+```
+App.do_build  ->  (self: App, args: Unknown) -> None
+```
+
+mypy honours inline annotations only from a package shipping a `py.typed` marker. PEP 561 has no equivalent for a top-level module, so mypy reports `import-untyped` and treats the module as `Any`. Silence it with an override:
+
+```toml
+[[tool.mypy.overrides]]
+module = ["argdec"]
+ignore_missing_imports = true
 ```
 
 ## Quick Start
@@ -196,9 +215,7 @@ if __name__ == '__main__':
     app.cmdline()
 ```
 
-The `_argparse_levels` attribute controls how deep the command hierarchy goes.
-A method name is split on **at most** `_argparse_levels` underscores, so the
-leaf command keeps whatever underscores remain:
+The `_argparse_levels` attribute controls how deep the command hierarchy goes. A method name is split on **at most** `_argparse_levels` underscores, so the leaf command keeps whatever underscores remain:
 
 | `_argparse_levels` | `do_python_shared_pkg` is invoked as |
 | --- | --- |
@@ -264,9 +281,7 @@ subcommands:
 
 ### Sharing Commands Between Applications
 
-Commands are inherited, so a common base class can supply commands to several
-applications. A subclass may override an inherited command by redefining the
-method under the same name.
+Commands are inherited, so a common base class can supply commands to several applications. A subclass may override an inherited command by redefining the method under the same name.
 
 ```python
 class CommonCommands(Commander):
@@ -285,9 +300,7 @@ class MyApp(CommonCommands):
 
 ### Driving the CLI Programmatically
 
-`cmdline()` reads `sys.argv[1:]` by default, but accepts an explicit argument
-list — useful in tests, in a REPL, or when embedding the CLI in a larger
-program. A `Commander` instance can be invoked repeatedly.
+`cmdline()` reads `sys.argv[1:]` by default, but accepts an explicit argument list — useful in tests, in a REPL, or when embedding the CLI in a larger program. A `Commander` instance can be invoked repeatedly.
 
 ```python
 app = MyApp()
@@ -295,8 +308,7 @@ app.cmdline(argv=["build", "--verbose"])
 app.cmdline(argv=["test"])
 ```
 
-`build_parser()` is also public, if you want the configured
-`argparse.ArgumentParser` without executing anything.
+`build_parser()` is also public, if you want the configured `argparse.ArgumentParser` without executing anything.
 
 ### Custom Command Prefix
 
@@ -334,17 +346,16 @@ except ArgDecError as e:
     print(f"Configuration error: {e}")
 ```
 
-Argparse conventions are preserved: `--help`, `--version`, argparse errors and
-a missing subcommand all raise `SystemExit` rather than an `ArgDecError`.
-Invoking an application (or an intermediate command) with no subcommand prints
-help to stderr and exits with status 2.
+Argparse conventions are preserved: `--help`, `--version`, argparse errors and a missing subcommand all raise `SystemExit` rather than an `ArgDecError`. Invoking an application (or an intermediate command) with no subcommand prints help to stderr and exits with status 2.
 
 ## Examples
 
 Can be found in the `examples` directory:
 
 - `basic.py` - Basic example application
+
 - `hierarchical.py` - Full-featured example application
+
 - `custom_prefix.py` - Custom prefix demonstrations
 
 ## Development
@@ -363,7 +374,9 @@ make all            # Run all checks
 ### Requirements
 
 - Python 3.10+
+
 - No external dependencies (uses stdlib only)
+
 - Development: pytest, ruff, mypy (optional)
 
 ## Version History
@@ -383,11 +396,11 @@ Based on the original [argdeclare recipe](http://code.activestate.com/recipes/57
 Contributions welcome! Please:
 
 1. Run tests: `make test`
+
 2. Check types: `make typecheck`
+
 3. Lint code: `make lint`
+
 4. Add tests for new features
 
-The suite is kept at 100% statement and branch coverage (`make coverage`).
-That is a floor, not a goal: coverage sat at 94% while several real defects hid
-in covered lines, so please add tests that exercise *behaviour*, not just
-lines.
+The suite is kept at 100% statement and branch coverage (`make coverage`). That is a floor, not a goal: coverage sat at 94% while several real defects hid in covered lines, so please add tests that exercise *behaviour*, not just lines.

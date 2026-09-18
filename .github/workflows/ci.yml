@@ -44,7 +44,7 @@ jobs:
         run: uv run ruff check .
 
       - name: Typecheck
-        run: uv run mypy argdec
+        run: uv run mypy argdec.py
 
       - name: Coverage
         run: uv run pytest --cov=argdec --cov-report=term-missing

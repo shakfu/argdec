@@ -30,7 +30,7 @@ fix:
 	uv run ruff check --fix .
 
 typecheck:
-	uv run mypy argdec
+	uv run mypy argdec.py
 
 build: clean
 	uv build

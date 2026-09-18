@@ -12,9 +12,9 @@ import inspect
 import logging
 import sys
 from collections.abc import Callable, Sequence
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 __all__ = [
     "ArgDecError",
@@ -62,10 +62,10 @@ logger = logging.getLogger(__name__)
 
 
 OptionSpec = tuple[tuple[Any, ...], dict[str, Any]]
-DecoratorFunc = Callable[[Callable[..., Any]], Callable[..., Any]]
+F = TypeVar("F", bound=Callable[..., Any])
 
 
-def option(*args: Any, **kwds: Any) -> DecoratorFunc:
+def option(*args: Any, **kwds: Any) -> Callable[[F], F]:
     """Decorator to add argparse options to command methods.
 
     Use this decorator to declaratively add command-line options to your
@@ -87,7 +87,7 @@ def option(*args: Any, **kwds: Any) -> DecoratorFunc:
                 print(f"Building from {args.file}")
     """
 
-    def _decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+    def _decorator(func: F) -> F:
         _option: OptionSpec = (args, kwds)
         if hasattr(func, "options"):
             cast(Any, func).options.append(_option)
@@ -102,7 +102,7 @@ def option(*args: Any, **kwds: Any) -> DecoratorFunc:
 arg = option
 
 
-def option_group(*options: DecoratorFunc) -> DecoratorFunc:
+def option_group(*options: Callable[[F], F]) -> Callable[[F], F]:
     """Combine multiple option decorators into a reusable group.
 
     This is useful when you have common options that should be applied to
@@ -119,7 +119,6 @@ def option_group(*options: DecoratorFunc) -> DecoratorFunc:
         # Define common options once
         common_opts = option_group(
             option("-v", "--verbose", action="store_true"),
-            option("-d", "--debug", action="store_true"),
         )
 
         # Apply to multiple commands
@@ -132,7 +131,7 @@ def option_group(*options: DecoratorFunc) -> DecoratorFunc:
             pass
     """
 
-    def _decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+    def _decorator(func: F) -> F:
         for opt in options:
             func = opt(func)
         return func
