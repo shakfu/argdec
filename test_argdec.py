@@ -520,6 +520,20 @@ class TestCustomPrefix:
         # Should discover 'build' method
         assert "build" in TestApp._argparse_subcmds
 
+    def test_empty_prefix_skips_private_methods(self):
+        """With an empty prefix, _private helpers must not become commands."""
+        class TestApp(Commander):
+            _command_prefix = ""
+
+            def build(self, args):
+                self._helper()
+
+            def _helper(self):
+                pass
+
+        assert set(TestApp._argparse_subcmds) == {"build"}
+        TestApp().cmdline(argv=["build"])
+
     def test_underscore_prefix(self):
         """Underscore prefix should work."""
         class TestApp(Commander):
@@ -874,6 +888,57 @@ class TestInheritance:
         assert executed == ["Mix.x", "Mix.y"]
 
 
+class TestPositionalParent:
+    """A command that takes positionals cannot also have subcommands."""
+
+    def test_positional_parent_with_child_rejected(self):
+        """The child would be shadowed by the parent's positional."""
+        class App(Commander):
+            _argparse_levels = 1
+
+            @option("name")
+            def do_test(self, args):
+                pass
+
+            def do_test_unit(self, args):
+                pass
+
+        with pytest.raises(ArgDecError, match="'test' takes positional arguments"):
+            App().cmdline(argv=["test", "unit"])
+
+    def test_optional_only_parent_with_child_allowed(self):
+        """Optional arguments on the parent do not shadow the child."""
+        executed = []
+
+        class App(Commander):
+            _argparse_levels = 1
+
+            @option("--name")
+            def do_test(self, args):
+                executed.append("test")
+
+            def do_test_unit(self, args):
+                executed.append("unit")
+
+        App().cmdline(argv=["test", "unit"])
+        App().cmdline(argv=["test", "--name", "x"])
+        assert executed == ["unit", "test"]
+
+    def test_positional_leaf_without_children_allowed(self):
+        """A positional on a command with no children is unaffected."""
+        captured = []
+
+        class App(Commander):
+            _argparse_levels = 1
+
+            @option("name")
+            def do_test_unit(self, args):
+                captured.append(args.name)
+
+        App().cmdline(argv=["test", "unit", "x"])
+        assert captured == ["x"]
+
+
 class TestHierarchyIsolation:
     """Sibling branches sharing a segment name must stay independent."""
 
@@ -1200,6 +1265,17 @@ class TestHelpFormatting:
 
         assert "myapp 1.0" in capsys.readouterr().out
 
+    def test_percent_in_version(self, capsys):
+        """A literal % in the version must print, not crash argparse."""
+        class App(Commander):
+            name = "myapp"
+            version = "1.0-100%"
+
+        with pytest.raises(SystemExit):
+            App().cmdline(argv=["--version"])
+
+        assert "myapp 1.0-100%" in capsys.readouterr().out
+
 
 class TestNameValidation:
     """Command name validation happens at class definition time."""
@@ -1397,3 +1473,57 @@ class TestUnexpectedParsingErrors:
             App().cmdline(argv=["build", "--count", "not-a-number"])
 
         assert excinfo.value.code == 2
+
+
+class TestDispatch:
+    """Handlers are bound through the instance and stored under a private dest."""
+
+    def test_option_with_dest_func(self):
+        """A user option named --func must not replace the command handler."""
+        captured = {}
+
+        class App(Commander):
+            @option("--func")
+            def do_f(self, args):
+                captured["func"] = args.func
+
+        App().cmdline(argv=["f", "--func", "z"])
+        assert captured == {"func": "z"}
+
+    def test_staticmethod_command(self):
+        """A staticmethod command receives only the parsed args."""
+        executed = []
+
+        class App(Commander):
+            @staticmethod
+            @option("--n", type=int)
+            def do_s(args):
+                executed.append(args.n)
+
+        App().cmdline(argv=["s", "--n", "3"])
+        assert executed == [3]
+
+    def test_option_outside_staticmethod(self):
+        """@option applied on top of @staticmethod still registers."""
+        executed = []
+
+        class App(Commander):
+            @option("--n", type=int)
+            @staticmethod
+            def do_s(args):
+                executed.append(args.n)
+
+        App().cmdline(argv=["s", "--n", "4"])
+        assert executed == [4]
+
+    def test_classmethod_command(self):
+        """A classmethod command is registered and receives the class."""
+        executed = []
+
+        class App(Commander):
+            @classmethod
+            def do_c(cls, args):
+                executed.append(cls)
+
+        App().cmdline(argv=["c"])
+        assert executed == [App]

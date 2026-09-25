@@ -14,7 +14,7 @@ import sys
 from collections.abc import Callable, Sequence
 from typing import Any, TypeVar, cast
 
-__version__ = "0.3.1"
+__version__ = "0.4.0"
 
 __all__ = [
     "ArgDecError",
@@ -143,6 +143,11 @@ def option_group(*options: Callable[[F], F]) -> Callable[[F], F]:
     return _decorator
 
 
+# Namespace attribute holding the command handler. Private so a user option
+# with dest "func" cannot replace it.
+_HANDLER_DEST = "_argdec_handler"
+
+
 def _help_texts(func: Callable[..., Any]) -> tuple[str | None, str | None]:
     """Derive argparse help and description text from a command's docstring.
 
@@ -215,12 +220,17 @@ class MetaCommander(type):
             # matches, and Commander's helpers must not become commands.
             if klass is object or (commander_cls is not None and klass is commander_cls):
                 continue
-            for name, func in klass.__dict__.items():
+            for name, attr in klass.__dict__.items():
+                # Unwrap so staticmethod and classmethod commands are found too.
+                func = attr.__func__ if isinstance(attr, (staticmethod, classmethod)) else attr
                 # Only process callable methods that start with the command prefix
                 # Skip special Python attributes (dunder methods) and non-callables
                 if not (name.startswith(command_prefix) and
                         callable(func) and
                         not (name.startswith('__') and name.endswith('__'))):
+                    continue
+                # With an empty prefix, _private methods are helpers, not commands.
+                if not command_prefix and name.startswith('_'):
                     continue
                 cmd_name = name[prefix_len:]
                 if cmd_name in subcmds:
@@ -243,9 +253,13 @@ class MetaCommander(type):
                 subcmd: dict[str, Any] = {
                     "name": cmd_name,
                     "func": func,
+                    "method": name,
                     "options": [],
                 }
-                if hasattr(func, "options"):
+                # @option may sit outside @staticmethod, on the wrapper itself.
+                if hasattr(attr, "options"):
+                    subcmd["options"] = attr.options
+                elif hasattr(func, "options"):
                     subcmd["options"] = func.options
                 subcmds[cmd_name] = subcmd
                 logger.debug(f"Registered command: {cmd_name}")
@@ -342,7 +356,10 @@ class Commander(metaclass=MetaCommander):
 
             for args, kwds in subcmd["options"]:
                 subparser.add_argument(*args, **kwds)
-            subparser.set_defaults(func=subcmd["func"])
+            # Bind through the instance so dispatch follows normal attribute
+            # lookup, including staticmethod and classmethod commands.
+            handler = getattr(self, subcmd["method"]) if "method" in subcmd else subcmd["func"]
+            subparser.set_defaults(**{_HANDLER_DEST: handler})
             logger.debug(f"Added parser for command: {name}")
             return subparser
         except (argparse.ArgumentError, TypeError, ValueError) as e:
@@ -387,6 +404,7 @@ class Commander(metaclass=MetaCommander):
 
         Raises:
             InvalidCommandNameError: If head is not a valid command name
+            ArgDecError: If a real command at this path takes positionals
         """
         if not head or not head.isidentifier():
             raise InvalidCommandNameError(f"Invalid parent command name: '{head}'")
@@ -399,6 +417,18 @@ class Commander(metaclass=MetaCommander):
             )
 
         parent_parser = self._argparse_parsers.get(key)
+        # A parent's positionals are parsed before its subcommand, so
+        # `test unit` would bind 'unit' to the positional and never reach
+        # the child.
+        parent_cmd = self._argparse_subcmds.get("_".join((*path, head)))
+        if parent_parser is not None and parent_cmd is not None and any(
+            not args or args[0][:1] not in parent_parser.prefix_chars
+            for args, _ in parent_cmd["options"]
+        ):
+            raise ArgDecError(
+                f"Command '{' '.join((*path, head))}' takes positional arguments "
+                "and cannot have subcommands"
+            )
         if parent_parser is None:
             # An intermediate level has no behaviour of its own, so invoking it
             # without a subcommand shows what it can do rather than silently
@@ -406,7 +436,7 @@ class Commander(metaclass=MetaCommander):
             # reference back to the parser is filled in immediately after.
             holder: list[argparse.ArgumentParser] = []
 
-            def show_help(instance: Any, args: argparse.Namespace) -> None:
+            def show_help(args: argparse.Namespace) -> None:
                 holder[0].print_help(sys.stderr)
                 raise SystemExit(2)
 
@@ -517,7 +547,7 @@ class Commander(metaclass=MetaCommander):
         )
 
         parser.add_argument(
-            "-v", "--version", action="version", version="%(prog)s " + self.version
+            "-v", "--version", action="version", version="%(prog)s " + self.version.replace("%", "%%")
         )
 
         subparsers = parser.add_subparsers(
@@ -568,16 +598,17 @@ class Commander(metaclass=MetaCommander):
             options = parser.parse_args(args)
 
             # Execute command
-            if not hasattr(options, 'func'):
+            handler = getattr(options, _HANDLER_DEST, None)
+            if handler is None:
                 parser.print_help(sys.stderr)
                 raise SystemExit(2)
 
             try:
-                logger.debug(f"Executing command: {options.func.__name__}")
-                options.func(self, options)
+                logger.debug(f"Executing command: {handler.__name__}")
+                handler(options)
             except Exception as e:
                 raise CommandExecutionError(
-                    f"Command '{options.func.__name__}' failed: {e}"
+                    f"Command '{handler.__name__}' failed: {e}"
                 ) from e
 
         except ArgDecError:

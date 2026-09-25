@@ -223,6 +223,8 @@ The `_argparse_levels` attribute controls how deep the command hierarchy goes. A
 | `1` | `app python shared_pkg` |
 | `2` | `app python shared pkg` |
 
+A command that takes positional arguments cannot also have subcommands; building the parser raises `ArgDecError`.
+
 With `_argparse_levels = 0`:
 
 ```text

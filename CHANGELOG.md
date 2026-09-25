@@ -6,11 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [unreleased]
 
-## [0.3.2]
+## [0.4.0]
 
 ### Changed
 
 - **A subclass's `_command_prefix` applies to its whole MRO.** Commands are now collected by walking the MRO with the subclass's prefix, so a subclass that changes the prefix no longer inherits commands defined under the old one.
+
+- **The command handler is no longer exposed as `args.func`.** It is stored under the private dest `_argdec_handler`, bound through the instance. A user option with dest `func` replaced the handler, so `f --func z` crashed with `'str' object has no attribute '__name__'`. A private dest is used over a build-time collision check so that `--func` stays usable.
+
+- **A command with positionals can no longer have subcommands.** With `_argparse_levels >= 1`, `do_test` taking `@option('name')` and `do_test_unit` built without error, but `test unit` ran `do_test` with `name='unit'`; the child was reachable only as `test <name> unit`. Building the parser now raises `ArgDecError`. Rejection was chosen over documenting `test <name> unit`, which is easy to misread.
 
 ### Fixed
 
@@ -21,6 +25,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Plain mixins contribute commands.** Only classes built by `MetaCommander` were scanned, so `class Mix` with `do_x` / `do_y` ahead of a `Commander` base registered neither override nor new command. The MRO walk includes non-metaclass bases, so mixin methods are commands and win over later bases as Python method lookup does. Their names are validated like any other command, so a mixin helper such as `do__private` now raises `InvalidCommandNameError`.
 
 - **A `%` in a command docstring no longer breaks the CLI.** The first docstring line became the subparser `help`, which argparse always %-formats; a literal percent such as `Report 100% coverage` made every `cmdline()` call, including unrelated commands and `--help`, raise `ArgDecError: badly formed help string`. The summary is now escaped. The description is left as is: argparse formats it only when it contains `%(prog)`, so escaping it would print `%%`.
+
+- **A `%` in `Commander.version` no longer crashes `--version`.** argparse %-formats the version string; `version = '1.0-100%'` raised `incomplete format`.
+
+- **`staticmethod` and `classmethod` commands work.** The raw class attribute was checked with `callable()`, which registered a `staticmethod` and skipped a `classmethod`, and dispatch passed `self` to both. The attribute is now unwrapped for discovery and looked up on the instance for dispatch. A `staticmethod` command takes only `args`.
+
+- **An empty `_command_prefix` skips `_private` methods.** Every method matched `''`, so a `_helper` method failed class creation with `InvalidCommandNameError`.
 
 ## [0.3.1]
 

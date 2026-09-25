@@ -1,6 +1,6 @@
 [project]
 name = "argdec"
-version = "0.3.1"
+version = "0.4.0"
 description = "A decorator-based, declarative interface to Python's argparse for building hierarchical CLI applications."
 readme = "README.md"
 requires-python = ">=3.10"
