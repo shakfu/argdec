@@ -169,12 +169,12 @@ class Application(Commander):
     #     """check reference utilities"""
     #     print(args)
 
-    @common_options    
+    @common_options
     def do_check_log_day(self, args):
         """analyze log day"""
         print(args)
 
-    @common_options    
+    @common_options
     def do_check_log_week(self, args):
         """analyze log week"""
         print(args)
@@ -223,15 +223,15 @@ The `_argparse_levels` attribute controls how deep the command hierarchy goes. A
 | `1` | `app python shared_pkg` |
 | `2` | `app python shared pkg` |
 
-`with levels=0` gives:
+With `_argparse_levels = 0`:
 
 ```text
 $ python3 demo.py
-usage: demo.py [-h] [-v]  ...
+usage: builder [-h] [-v]  ...
 
 builder: builds the py-js max external and python from source.
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   -v, --version         show program's version number and exit
 
@@ -255,16 +255,15 @@ subcommands:
     test_functions      test functions
 ```
 
-`with levels=1` gives:
+With `_argparse_levels = 1`:
 
 ```text
-
 $ python3 demo.py
-usage: demo.py [-h] [-v]  ...
+usage: builder [-h] [-v]  ...
 
 builder: builds the py-js max external and python from source.
 
-optional arguments:
+options:
   -h, --help     show this help message and exit
   -v, --version  show program's version number and exit
 
@@ -279,9 +278,28 @@ subcommands:
 
 ## Advanced Features
 
+### Option Order
+
+Stacked `@option` decorators register in source order, top to bottom. For positionals this sets the binding order:
+
+```python
+class App(Commander):
+    @option("src")
+    @option("dst")
+    def do_cp(self, args):
+        print(args.src, "->", args.dst)
+```
+
+```bash
+$ python app.py cp a b
+a -> b
+```
+
+`option_group` keeps the order of its arguments in the same way.
+
 ### Sharing Commands Between Applications
 
-Commands are inherited, so a common base class can supply commands to several applications. A subclass may override an inherited command by redefining the method under the same name.
+Commands are inherited, so a common base class can supply commands to several applications. Plain mixin classes, without `Commander` as a base, can supply `do_` methods too. A subclass may override an inherited command by redefining the method under the same name. Resolution follows the class MRO, as for any Python method.
 
 ```python
 class CommonCommands(Commander):
@@ -300,12 +318,12 @@ class MyApp(CommonCommands):
 
 ### Driving the CLI Programmatically
 
-`cmdline()` reads `sys.argv[1:]` by default, but accepts an explicit argument list — useful in tests, in a REPL, or when embedding the CLI in a larger program. A `Commander` instance can be invoked repeatedly.
+`cmdline()` reads `sys.argv[1:]` by default, but accepts an explicit argument list -- useful in tests, in a REPL, or when embedding the CLI in a larger program. A `Commander` instance can be invoked repeatedly.
 
 ```python
 app = MyApp()
 app.cmdline(argv=["build", "--verbose"])
-app.cmdline(argv=["test"])
+app.cmdline(argv=["build"])
 ```
 
 `build_parser()` is also public, if you want the configured `argparse.ArgumentParser` without executing anything.
@@ -346,7 +364,7 @@ except ArgDecError as e:
     print(f"Configuration error: {e}")
 ```
 
-Argparse conventions are preserved: `--help`, `--version`, argparse errors and a missing subcommand all raise `SystemExit` rather than an `ArgDecError`. Invoking an application (or an intermediate command) with no subcommand prints help to stderr and exits with status 2.
+Argparse conventions are preserved: `--help`, `--version`, argparse errors and a missing subcommand all raise `SystemExit` rather than an `ArgDecError`. With no arguments, an application runs `default_args`; the default `['--help']` prints help and exits with status 0. An intermediate command with no subcommand, or an application with `default_args = []`, prints help to stderr and exits with status 2.
 
 ## Examples
 
@@ -403,4 +421,4 @@ Contributions welcome! Please:
 
 4. Add tests for new features
 
-The suite is kept at 100% statement and branch coverage (`make coverage`). That is a floor, not a goal: coverage sat at 94% while several real defects hid in covered lines, so please add tests that exercise *behaviour*, not just lines.
+The suite is kept at 100% statement and branch coverage (`make coverage`). Coverage once sat at 94% while several real defects were in covered lines. Add tests that check *behaviour* as well as lines.
