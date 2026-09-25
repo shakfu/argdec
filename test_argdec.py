@@ -28,15 +28,15 @@ class TestOptionDecorator:
         assert func.options[0] == (("-v", "--verbose"), {"action": "store_true"})
 
     def test_multiple_option_decorators(self):
-        """Multiple option decorators should stack properly."""
+        """Multiple option decorators should keep source (top-to-bottom) order."""
         @option("-v", "--verbose", action="store_true")
         @option("-q", "--quiet", action="store_true")
         def func():
             pass
 
         assert len(func.options) == 2
-        assert func.options[0] == (("-q", "--quiet"), {"action": "store_true"})
-        assert func.options[1] == (("-v", "--verbose"), {"action": "store_true"})
+        assert func.options[0] == (("-v", "--verbose"), {"action": "store_true"})
+        assert func.options[1] == (("-q", "--quiet"), {"action": "store_true"})
 
     def test_option_with_various_args(self):
         """option should handle various argparse arguments."""
@@ -55,6 +55,21 @@ class TestOptionDecorator:
         """arg should be an alias for option."""
         from argdec import arg
         assert arg is option
+
+    def test_stacked_positionals_keep_source_order(self):
+        """Positional @option decorators should bind in top-to-bottom source order."""
+        captured = {}
+
+        class App(Commander):
+            @option("src")
+            @option("dst")
+            def do_cp(self, args):
+                captured["src"] = args.src
+                captured["dst"] = args.dst
+
+        App().cmdline(argv=["cp", "from", "to"])
+        assert captured == {"src": "from", "dst": "to"}
+        assert [o[0] for o in App.do_cp.options] == [("src",), ("dst",)]
 
 
 class TestOptionGroup:
@@ -813,6 +828,51 @@ class TestInheritance:
 
         assert set(App._argparse_subcmds) == {"build", "test", "deploy"}
 
+    def test_diamond_inheritance_follows_mro(self):
+        """In a diamond, dispatch must match Python's MRO, not a flattened merge."""
+        executed = []
+
+        class A(Commander):
+            def do_x(self, args):
+                executed.append("A")
+
+        class C(A):
+            def do_x(self, args):
+                executed.append("C")
+
+        class B(A):
+            pass
+
+        class D(B, C):
+            pass
+
+        assert D.do_x is C.do_x
+        D().cmdline(argv=["x"])
+        assert executed == ["C"]
+
+    def test_plain_mixin_commands_are_registered(self):
+        """do_* methods on a plain mixin should be commands and win over bases."""
+        executed = []
+
+        class Mix:
+            def do_x(self, args):
+                executed.append("Mix.x")
+
+            def do_y(self, args):
+                executed.append("Mix.y")
+
+        class Base(Commander):
+            def do_x(self, args):
+                executed.append("Base.x")
+
+        class M(Mix, Base):
+            pass
+
+        assert set(M._argparse_subcmds) == {"x", "y"}
+        M().cmdline(argv=["x"])
+        M().cmdline(argv=["y"])
+        assert executed == ["Mix.x", "Mix.y"]
+
 
 class TestHierarchyIsolation:
     """Sibling branches sharing a segment name must stay independent."""
@@ -1101,6 +1161,33 @@ class TestHelpFormatting:
         out = capsys.readouterr().out
         assert "build the project" in out
         assert "much longer explanation" not in out
+
+    def test_percent_in_docstring_does_not_break_parser(self, capsys):
+        """A literal % in a command docstring must not make argparse choke."""
+        executed = []
+
+        class App(Commander):
+            def do_cov(self, args):
+                """Report 100% coverage"""
+                executed.append("cov")
+
+            def do_ok(self, args):
+                """Fine"""
+                executed.append("ok")
+
+        App().cmdline(argv=["ok"])
+        App().cmdline(argv=["cov"])
+        assert executed == ["ok", "cov"]
+
+        with pytest.raises(SystemExit):
+            App().cmdline(argv=["--help"])
+        assert "100% coverage" in capsys.readouterr().out
+
+        with pytest.raises(SystemExit):
+            App().cmdline(argv=["cov", "--help"])
+        out = capsys.readouterr().out
+        assert "100% coverage" in out
+        assert "%%" not in out
 
     def test_prog_name_uses_name_attribute(self, capsys):
         """The `name` attribute should set the program name in usage output."""

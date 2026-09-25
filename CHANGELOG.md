@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [unreleased]
 
+## [0.3.2]
+
+### Changed
+
+- **A subclass's `_command_prefix` applies to its whole MRO.** Commands are now collected by walking the MRO with the subclass's prefix, so a subclass that changes the prefix no longer inherits commands defined under the old one.
+
+### Fixed
+
+- **Stacked `@option` decorators keep source order.** Decorators run bottom-up and `option()` used to append, so `@option('src')` above `@option('dst')` registered as `dst` then `src`: `cp from to` bound `src='to'`, `dst='from'`, and help listed them reversed. Options are now prepended (and `option_group` applies right-to-left to match), so top-to-bottom source order is what argparse sees.
+
+- **Command inheritance follows the class MRO.** Bases' `_argparse_subcmds` were merged in `reversed(bases)` order, and each base's dict already carried shared ancestors, so a diamond `D(B, C)` with `C` overriding `A.do_x` still dispatched to `A.do_x`. Commands are now collected by walking the finished class's MRO and taking each class's own `__dict__` entries; the first definition wins, matching `D.do_x`.
+
+- **Plain mixins contribute commands.** Only classes built by `MetaCommander` were scanned, so `class Mix` with `do_x` / `do_y` ahead of a `Commander` base registered neither override nor new command. The MRO walk includes non-metaclass bases, so mixin methods are commands and win over later bases as Python method lookup does. Their names are validated like any other command, so a mixin helper such as `do__private` now raises `InvalidCommandNameError`.
+
+- **A `%` in a command docstring no longer breaks the CLI.** The first docstring line became the subparser `help`, which argparse always %-formats; a literal percent such as `Report 100% coverage` made every `cmdline()` call, including unrelated commands and `--help`, raise `ArgDecError: badly formed help string`. The summary is now escaped. The description is left as is: argparse formats it only when it contains `%(prog)`, so escaping it would print `%%`.
+
 ## [0.3.1]
 
 ### Changed

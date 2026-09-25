@@ -88,9 +88,11 @@ def option(*args: Any, **kwds: Any) -> Callable[[F], F]:
     """
 
     def _decorator(func: F) -> F:
+        # Prepend so source order is preserved: decorators run bottom-up,
+        # and inserting at the front undoes that reversal.
         _option: OptionSpec = (args, kwds)
         if hasattr(func, "options"):
-            cast(Any, func).options.append(_option)
+            cast(Any, func).options.insert(0, _option)
         else:
             cast(Any, func).options = [_option]
         return func
@@ -132,7 +134,9 @@ def option_group(*options: Callable[[F], F]) -> Callable[[F], F]:
     """
 
     def _decorator(func: F) -> F:
-        for opt in options:
+        # Apply right-to-left so that, combined with option()'s prepend,
+        # the resulting list matches the order given to option_group.
+        for opt in reversed(options):
             func = opt(func)
         return func
 
@@ -155,7 +159,9 @@ def _help_texts(func: Callable[..., Any]) -> tuple[str | None, str | None]:
     doc = inspect.getdoc(func)
     if not doc:
         return None, None
-    summary = doc.splitlines()[0].strip() or None
+    # argparse always %-formats `help`, but formats `description` only when it
+    # contains "%(prog)", so only the summary is escaped.
+    summary = doc.splitlines()[0].strip().replace("%", "%%") or None
     return summary, doc
 
 
@@ -166,7 +172,8 @@ class MetaCommander(type):
     and registers them as subcommands. Captures any options added via the @option decorator.
 
     Commands are inherited: a subclass keeps every command defined by its base
-    classes and may override one by redefining the method under the same name.
+    classes (and plain mixins) and may override one by redefining the method
+    under the same name. Resolution follows the class MRO.
 
     The command prefix can be customized by setting the _command_prefix class attribute;
     it too is inherited by subclasses.
@@ -190,20 +197,34 @@ class MetaCommander(type):
             command_prefix = 'do_'
         prefix_len = len(command_prefix)
 
-        # Inherit commands from base classes, following MRO precedence: later
-        # bases win over earlier ones, and this class's own commands win over all.
+        # Build the class first, then collect commands by walking its MRO.
+        # Scanning each class's own __dict__ (not merged _argparse_subcmds)
+        # matches Python method resolution: earlier MRO entries win, diamond
+        # ancestors are visited once, and plain mixins contribute their do_*
+        # methods even without MetaCommander.
+        # Filled in place below; the class holds this same dict object.
         subcmds: dict[str, dict[str, Any]] = {}
-        for base in reversed(bases):
-            subcmds.update(getattr(base, '_argparse_subcmds', {}))
+        classdict["_argparse_subcmds"] = subcmds
+        new_cls = type.__new__(cls, classname, bases, classdict)
 
-        own: dict[str, dict[str, Any]] = {}
-        for name, func in list(classdict.items()):
-            # Only process callable methods that start with the command prefix
-            # Skip special Python attributes (dunder methods) and non-callables
-            if (name.startswith(command_prefix) and
-                callable(func) and
-                not (name.startswith('__') and name.endswith('__'))):
+        # Late-bound: Commander is assigned after its own MetaCommander.__new__
+        # returns, so it is absent from globals while that class is built.
+        commander_cls = globals().get("Commander")
+        for klass in new_cls.__mro__:
+            # Skip object and Commander: with an empty prefix every method name
+            # matches, and Commander's helpers must not become commands.
+            if klass is object or (commander_cls is not None and klass is commander_cls):
+                continue
+            for name, func in klass.__dict__.items():
+                # Only process callable methods that start with the command prefix
+                # Skip special Python attributes (dunder methods) and non-callables
+                if not (name.startswith(command_prefix) and
+                        callable(func) and
+                        not (name.startswith('__') and name.endswith('__'))):
+                    continue
                 cmd_name = name[prefix_len:]
+                if cmd_name in subcmds:
+                    continue  # earlier in MRO already won
 
                 # Validate command name
                 if not cmd_name:
@@ -219,15 +240,6 @@ class MetaCommander(type):
                         f"Invalid command name '{cmd_name}' from method '{name}'"
                     )
 
-                # Defensive: method names within a class body are unique, so
-                # two commands in `own` cannot currently collide. The guard
-                # stays to keep that invariant explicit if name mapping ever
-                # becomes less direct.
-                if cmd_name in own:  # pragma: no cover
-                    raise DuplicateCommandError(
-                        f"Duplicate command '{cmd_name}' found in class '{classname}'"
-                    )
-
                 subcmd: dict[str, Any] = {
                     "name": cmd_name,
                     "func": func,
@@ -235,12 +247,10 @@ class MetaCommander(type):
                 }
                 if hasattr(func, "options"):
                     subcmd["options"] = func.options
-                own[cmd_name] = subcmd
+                subcmds[cmd_name] = subcmd
                 logger.debug(f"Registered command: {cmd_name}")
 
-        subcmds.update(own)
-        classdict["_argparse_subcmds"] = subcmds
-        return type.__new__(cls, classname, bases, classdict)
+        return new_cls
 
 
 class Commander(metaclass=MetaCommander):

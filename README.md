@@ -327,7 +327,7 @@ class MyApp(Commander):
         pass
 ```
 
-The prefix is inherited by subclasses.
+The prefix is inherited by subclasses. A subclass that sets its own prefix applies it to every class in its MRO, so commands defined under the old prefix are no longer inherited.
 
 See `examples/custom_prefix.py` for more examples.
 
