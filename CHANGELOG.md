@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [unreleased]
 
+## [0.4.1]
+
+### Fixed
+
+- **Setting an inherited command to a non-callable removes it.** A subclass that set `do_build = None` or a property still listed `build`, and running it printed the root help and exited 2. The class-hierarchy walk skipped non-callables without claiming their name, so the base method registered instead. A non-callable override now hides the inherited command. With an empty `_command_prefix`, any public non-callable attribute also hides a base command of the same name.
+
+- **`option()` no longer adds options to other commands.** It inserted into the function's existing `options` list, which a `functools.wraps` wrapper or a base class's command can share. An option added in a subclass or on a wrapper then also appeared on the base command or the wrapped function. `option()` now builds a new list.
+
+- **A docstring with `%(prog)` and a plain `%` no longer crashes `--help`.** argparse %-formats `description` and `epilog` when they contain `%(prog)`, so any other `%` raised `TypeError`. Only the summary line was escaped. A lone `%` in a command docstring, the class docstring or `epilog` is now escaped when `%(prog)` is present; `%(prog)` and an existing `%%` are kept as written.
+
+- **A parent option keeps its value when a child command defines the same option.** In nested mode, argparse copies the child's namespace, defaults included, over the parent's, so `test --flag unit` gave `flag=False`. A child's default for a destination an ancestor also defines is now suppressed: the deepest value given wins, and an option not given at that level keeps the parent's value. Such options no longer show a default in the child's `--help`, and an `append` or `count` option given at both levels keeps only the child's value.
+
+- **Commands without `__name__` run.** A `functools.partial` or class-level callable instance registered as a command never ran: `cmdline()` read `handler.__name__` before the call and in its error message, so it raised `ArgDecError: Unexpected error in cmdline`. A partial's help also showed `functools.partial`'s own docstring; it now shows the wrapped function's.
+
+- **Flat mode accepts any non-empty command name.** With `_argparse_levels = 0`, names such as `do_upgrade_3to4` or `do_foo__bar` raised `InvalidCommandNameError` at class definition, so the module failed to import. Per-segment identifier checks now run only when `_argparse_levels > 0`, since flat mode never splits the name.
+
 ## [0.4.0]
 
 ### Changed

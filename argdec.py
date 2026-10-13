@@ -8,13 +8,15 @@ This is based on my old `argdeclare` code
 
 """
 import argparse
+import functools
 import inspect
 import logging
+import re
 import sys
 from collections.abc import Callable, Sequence
 from typing import Any, TypeVar, cast
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 __all__ = [
     "ArgDecError",
@@ -89,12 +91,10 @@ def option(*args: Any, **kwds: Any) -> Callable[[F], F]:
 
     def _decorator(func: F) -> F:
         # Prepend so source order is preserved: decorators run bottom-up,
-        # and inserting at the front undoes that reversal.
+        # and inserting at the front undoes that reversal. Build a new list:
+        # wraps() and registered classes may share the existing one.
         _option: OptionSpec = (args, kwds)
-        if hasattr(func, "options"):
-            cast(Any, func).options.insert(0, _option)
-        else:
-            cast(Any, func).options = [_option]
+        cast(Any, func).options = [_option, *getattr(func, "options", [])]
         return func
 
     return _decorator
@@ -148,6 +148,18 @@ def option_group(*options: Callable[[F], F]) -> Callable[[F], F]:
 _HANDLER_DEST = "_argdec_handler"
 
 
+def _escape_description(text: str | None) -> str | None:
+    """Escape lone '%' in text that argparse will %-format with `prog`.
+
+    argparse formats `description` and `epilog` only when they contain
+    "%(prog)"; any other '%' is then parsed as a conversion and raises.
+    '%(prog)' and an already-escaped '%%' are kept as written.
+    """
+    if not text or "%(prog)" not in text:
+        return text
+    return re.sub(r"%(\(prog\)|%)?", lambda m: m.group(0) if m.group(1) else "%%", text)
+
+
 def _help_texts(func: Callable[..., Any]) -> tuple[str | None, str | None]:
     """Derive argparse help and description text from a command's docstring.
 
@@ -161,13 +173,15 @@ def _help_texts(func: Callable[..., Any]) -> tuple[str | None, str | None]:
     Returns:
         Tuple of (summary, description), either of which may be None
     """
+    # A partial's own docstring is functools.partial's; use the wrapped function's.
+    while isinstance(func, functools.partial):
+        func = func.func
     doc = inspect.getdoc(func)
     if not doc:
         return None, None
-    # argparse always %-formats `help`, but formats `description` only when it
-    # contains "%(prog)", so only the summary is escaped.
+    # argparse always %-formats `help`, but `description` only with "%(prog)".
     summary = doc.splitlines()[0].strip().replace("%", "%%") or None
-    return summary, doc
+    return summary, _escape_description(doc)
 
 
 class MetaCommander(type):
@@ -215,6 +229,10 @@ class MetaCommander(type):
         # Late-bound: Commander is assigned after its own MetaCommander.__new__
         # returns, so it is absent from globals while that class is built.
         commander_cls = globals().get("Commander")
+        # Names resolved by an earlier MRO entry, callable or not. A
+        # non-callable override (do_build = None) removes the inherited command.
+        claimed: set[str] = set()
+        levels = getattr(new_cls, "_argparse_levels", 0)
         for klass in new_cls.__mro__:
             # Skip object and Commander: with an empty prefix every method name
             # matches, and Commander's helpers must not become commands.
@@ -223,18 +241,20 @@ class MetaCommander(type):
             for name, attr in klass.__dict__.items():
                 # Unwrap so staticmethod and classmethod commands are found too.
                 func = attr.__func__ if isinstance(attr, (staticmethod, classmethod)) else attr
-                # Only process callable methods that start with the command prefix
-                # Skip special Python attributes (dunder methods) and non-callables
-                if not (name.startswith(command_prefix) and
-                        callable(func) and
-                        not (name.startswith('__') and name.endswith('__'))):
+                # Only process names that start with the command prefix.
+                # Skip special Python attributes (dunder methods).
+                if not name.startswith(command_prefix) or (
+                        name.startswith('__') and name.endswith('__')):
                     continue
                 # With an empty prefix, _private methods are helpers, not commands.
                 if not command_prefix and name.startswith('_'):
                     continue
                 cmd_name = name[prefix_len:]
-                if cmd_name in subcmds:
+                if cmd_name in claimed:
                     continue  # earlier in MRO already won
+                claimed.add(cmd_name)
+                if not callable(func):
+                    continue
 
                 # Validate command name
                 if not cmd_name:
@@ -245,7 +265,9 @@ class MetaCommander(type):
                 # Validate each underscore-separated segment: in hierarchical
                 # mode every segment becomes its own subcommand, so an empty
                 # segment (from a leading or doubled underscore) is invalid.
-                if not all(segment.isidentifier() for segment in cmd_name.split("_")):
+                # Flat mode never splits, so argparse accepts any non-empty name.
+                if levels and not all(
+                        segment.isidentifier() for segment in cmd_name.split("_")):
                     raise InvalidCommandNameError(
                         f"Invalid command name '{cmd_name}' from method '{name}'"
                     )
@@ -517,12 +539,32 @@ class Commander(metaclass=MetaCommander):
         # if a deeper command later needs to hang off it.
         if not tail:
             subparser = self.add_parser(subparsers, subcmd, name=head)
+            self._suppress_shared_defaults(subparser, (*path, head))
             self._argparse_parsers[".".join((*path, head))] = subparser
             return subparser
 
         # Recursive case: ensure parent exists, then recurse on the remainder
         parent_subparsers = self._ensure_parent_parser(subparsers, head, path)
         return self._add_command(parent_subparsers, subcmd, tail, (*path, head))
+
+    def _suppress_shared_defaults(
+        self, subparser: argparse.ArgumentParser, path: tuple[str, ...]
+    ) -> None:
+        """Suppress the command's defaults for dests an ancestor also defines.
+
+        argparse copies the child namespace, defaults included, over the
+        parent's, so `test --flag unit` would lose the parent's --flag. With
+        the child default suppressed, the child value wins only when given.
+        """
+        inherited = {
+            a.dest
+            for i in range(1, len(path))
+            if (ancestor := self._argparse_parsers.get(".".join(path[:i]))) is not None
+            for a in ancestor._actions
+        }
+        for action in subparser._actions:
+            if action.dest in inherited and not isinstance(action, argparse._HelpAction):
+                action.default = argparse.SUPPRESS
 
     def build_parser(self) -> argparse.ArgumentParser:
         """Build the fully populated argument parser for this application.
@@ -542,8 +584,8 @@ class Commander(metaclass=MetaCommander):
         parser = argparse.ArgumentParser(
             prog=self.name or None,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-            description=self.__doc__,
-            epilog=self.epilog,
+            description=_escape_description(self.__doc__),
+            epilog=_escape_description(self.epilog),
         )
 
         parser.add_argument(
@@ -603,12 +645,14 @@ class Commander(metaclass=MetaCommander):
                 parser.print_help(sys.stderr)
                 raise SystemExit(2)
 
+            # Partials and callable instances have no __name__.
+            handler_name = getattr(handler, "__name__", repr(handler))
             try:
-                logger.debug(f"Executing command: {handler.__name__}")
+                logger.debug(f"Executing command: {handler_name}")
                 handler(options)
             except Exception as e:
                 raise CommandExecutionError(
-                    f"Command '{handler.__name__}' failed: {e}"
+                    f"Command '{handler_name}' failed: {e}"
                 ) from e
 
         except ArgDecError:

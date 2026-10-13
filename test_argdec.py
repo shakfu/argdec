@@ -1,5 +1,6 @@
 """Test suite for argdec module."""
 import argparse
+import functools
 
 import pytest
 
@@ -70,6 +71,37 @@ class TestOptionDecorator:
         App().cmdline(argv=["cp", "from", "to"])
         assert captured == {"src": "from", "dst": "to"}
         assert [o[0] for o in App.do_cp.options] == [("src",), ("dst",)]
+
+    def test_subclass_option_does_not_leak_into_base(self):
+        """Re-decorating an inherited command must not change the base class."""
+        class D(Commander):
+            @option("--x")
+            def do_go(self, args):
+                pass
+
+        class E(D):
+            do_go = option("--y")(D.do_go)
+
+        assert [o[0] for o in D._argparse_subcmds["go"]["options"]] == [("--x",)]
+        assert [o[0] for o in E._argparse_subcmds["go"]["options"]] == [("--y",), ("--x",)]
+        with pytest.raises(SystemExit):
+            D().cmdline(argv=["go", "--y", "1"])
+
+    def test_option_on_wrapper_does_not_leak_into_wrapped(self):
+        """functools.wraps copies __dict__; adding to the wrapper must not alter the original."""
+        import functools
+
+        @option("--x")
+        def func():
+            pass
+
+        @option("--y")
+        @functools.wraps(func)
+        def wrapper():
+            pass
+
+        assert [o[0] for o in func.options] == [("--x",)]
+        assert [o[0] for o in wrapper.options] == [("--y",), ("--x",)]
 
 
 class TestOptionGroup:
@@ -693,9 +725,11 @@ class TestErrorConditions:
                     pass
 
     def test_invalid_identifier_raises_error(self):
-        """Command name that's not a valid identifier should raise error."""
+        """In hierarchical mode a non-identifier segment should raise error."""
         with pytest.raises(InvalidCommandNameError, match="Invalid command name"):
             class BadApp(Commander):
+                _argparse_levels = 1
+
                 def do_123invalid(self, args):
                     """Starts with number"""
                     pass
@@ -795,6 +829,25 @@ class TestInheritance:
 
         Child().cmdline(argv=["build"])
         assert executed == ["child"]
+
+    @pytest.mark.parametrize("shadow", [None, property(lambda self: None)])
+    def test_non_callable_override_removes_base_command(self, shadow, capsys):
+        """A non-callable do_* in a subclass should remove the inherited command."""
+        class Base(Commander):
+            def do_build(self, args):
+                """build"""
+
+            def do_test(self, args):
+                """test"""
+
+        class Child(Base):
+            do_build = shadow
+
+        assert set(Child._argparse_subcmds) == {"test"}
+        with pytest.raises(SystemExit) as exc:
+            Child().cmdline(argv=["build"])
+        assert exc.value.code == 2
+        assert "invalid choice" in capsys.readouterr().err
 
     def test_deep_inheritance_chain(self):
         """Commands should accumulate across a multi-level hierarchy."""
@@ -923,6 +976,66 @@ class TestPositionalParent:
         App().cmdline(argv=["test", "unit"])
         App().cmdline(argv=["test", "--name", "x"])
         assert executed == ["unit", "test"]
+
+    @pytest.mark.parametrize("argv, expected", [
+        (["test", "--flag", "unit"], True),
+        (["test", "unit", "--flag"], True),
+        (["test", "unit"], False),
+    ])
+    def test_parent_option_shared_with_child_kept(self, argv, expected):
+        """The child's default must not overwrite the parent's parsed value."""
+        captured = []
+
+        class App(Commander):
+            _argparse_levels = 1
+
+            @option("--flag", action="store_true")
+            def do_test(self, args):
+                pass
+
+            @option("--flag", action="store_true")
+            def do_test_unit(self, args):
+                captured.append(args.flag)
+
+        App().cmdline(argv=argv)
+        assert captured == [expected]
+
+    def test_grandparent_option_shared_with_leaf_kept(self):
+        """Suppression applies to every real ancestor, not only the parent."""
+        captured = []
+
+        class App(Commander):
+            _argparse_levels = 2
+
+            @option("--level", default="info")
+            def do_a(self, args):
+                pass
+
+            @option("--level", default="info")
+            def do_a_b_c(self, args):
+                captured.append(args.level)
+
+        App().cmdline(argv=["a", "--level", "debug", "b", "c"])
+        App().cmdline(argv=["a", "--level", "debug", "b", "c", "--level", "warn"])
+        assert captured == ["debug", "warn"]
+
+    def test_parent_option_reaches_child(self):
+        """Distinct dests on parent and child both survive parsing."""
+        captured = []
+
+        class App(Commander):
+            _argparse_levels = 1
+
+            @option("--flag", action="store_true")
+            def do_test(self, args):
+                pass
+
+            @option("--other", action="store_true")
+            def do_test_unit(self, args):
+                captured.append((args.flag, args.other))
+
+        App().cmdline(argv=["test", "--flag", "unit"])
+        assert captured == [(True, False)]
 
     def test_positional_leaf_without_children_allowed(self):
         """A positional on a command with no children is unaffected."""
@@ -1254,6 +1367,31 @@ class TestHelpFormatting:
         assert "100% coverage" in out
         assert "%%" not in out
 
+    def test_percent_with_prog_in_docstring(self, capsys):
+        """A literal % beside %(prog)s must not crash --help."""
+        class App(Commander):
+            """%(prog)s runs at 50% load, 10%% idle"""
+            name = "myapp"
+            epilog = "see %(prog)s docs; 100% free"
+
+            def do_x(self, args):
+                """Run %(prog)s at 50% load
+
+                %(prog)s keeps 10%% idle.
+                """
+
+        with pytest.raises(SystemExit):
+            App().cmdline(argv=["--help"])
+        out = capsys.readouterr().out
+        assert "myapp runs at 50% load, 10% idle" in out
+        assert "see myapp docs; 100% free" in out
+
+        with pytest.raises(SystemExit):
+            App().cmdline(argv=["x", "--help"])
+        out = capsys.readouterr().out
+        assert "Run myapp x at 50% load" in out
+        assert "myapp x keeps 10% idle." in out
+
     def test_prog_name_uses_name_attribute(self, capsys):
         """The `name` attribute should set the program name in usage output."""
         class App(Commander):
@@ -1281,18 +1419,40 @@ class TestNameValidation:
     """Command name validation happens at class definition time."""
 
     def test_double_underscore_rejected(self):
-        """A doubled underscore yields an empty path segment and is invalid."""
+        """In hierarchical mode a doubled underscore yields an empty segment."""
         with pytest.raises(InvalidCommandNameError, match="Invalid command name"):
             class BadApp(Commander):
+                _argparse_levels = 1
+
                 def do__foo(self, args):
                     """leading underscore"""
 
     def test_trailing_underscore_rejected(self):
-        """A trailing underscore yields an empty trailing segment."""
+        """In hierarchical mode a trailing underscore yields an empty segment."""
         with pytest.raises(InvalidCommandNameError, match="Invalid command name"):
             class BadApp(Commander):
+                _argparse_levels = 1
+
                 def do_foo_(self, args):
                     """trailing underscore"""
+
+    def test_inherited_levels_validate(self):
+        """_argparse_levels inherited from a base enables segment validation."""
+        class Base(Commander):
+            _argparse_levels = 1
+
+        with pytest.raises(InvalidCommandNameError, match="Invalid command name"):
+            class BadApp(Base):
+                def do_foo__bar(self, args):
+                    """doubled underscore"""
+
+    @pytest.mark.parametrize("method", ["do_upgrade_3to4", "do_foo__bar", "do_foo_", "do_3to4"])
+    def test_flat_mode_accepts_non_identifier_segments(self, method):
+        """Flat mode never splits the name, so argparse accepts it as-is."""
+        calls = []
+        App = type(method, (Commander,), {method: lambda self, args: calls.append(1)})
+        App().cmdline(argv=[method[len("do_"):]])
+        assert calls == [1]
 
     def test_error_message_names_the_custom_prefix(self):
         """The empty-name error should quote the configured prefix."""
@@ -1502,6 +1662,33 @@ class TestDispatch:
 
         App().cmdline(argv=["s", "--n", "3"])
         assert executed == [3]
+
+    def test_partial_command(self):
+        """A functools.partial command runs and shows the wrapped docstring."""
+        executed = []
+
+        def run(tag, args):
+            """Run the tagged job."""
+            executed.append(tag)
+
+        class App(Commander):
+            do_p = staticmethod(functools.partial(run, "p"))
+
+        App().cmdline(argv=["p"])
+        assert executed == ["p"]
+        assert "Run the tagged job." in App().build_parser().format_help()
+
+    def test_callable_instance_command(self):
+        """A class-level callable instance runs; its failure is wrapped."""
+        class Job:
+            def __call__(self, args):
+                raise RuntimeError("boom")
+
+        class App(Commander):
+            do_j = Job()
+
+        with pytest.raises(CommandExecutionError, match="boom"):
+            App().cmdline(argv=["j"])
 
     def test_option_outside_staticmethod(self):
         """@option applied on top of @staticmethod still registers."""
